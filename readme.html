@@ -1,0 +1,697 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>⚡ TaskBoard — README</title>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@300;400;500;700&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#080b14;--bg2:#0d1020;--surface:#131727;--surface2:#191e30;--surface3:#1f253b;
+  --border:#252c44;--border2:#2e3752;--text:#d8e1f5;--text2:#7a88b0;--text3:#3d4a6a;
+  --accent:#4f8ef7;--r:12px;--rs:8px;
+  --sh:0 4px 24px rgba(0,0,0,.5);--shl:0 8px 40px rgba(0,0,0,.7)
+}
+html{font-size:16px;scroll-behavior:smooth}
+body{
+  font-family:'Noto Sans JP',sans-serif;
+  background:var(--bg);color:var(--text);
+  min-height:100vh;line-height:1.7;
+}
+::-webkit-scrollbar{width:5px}::-webkit-scrollbar-track{background:var(--bg2)}
+::-webkit-scrollbar-thumb{background:var(--border2);border-radius:3px}
+
+/* ─── HEADER ─── */
+.site-header{
+  background:linear-gradient(135deg,var(--bg2) 0%,rgba(79,142,247,.08) 100%);
+  border-bottom:1px solid var(--border);
+  padding:0 24px;
+  position:sticky;top:0;z-index:100;backdrop-filter:blur(16px);
+}
+.header-inner{
+  max-width:960px;margin:0 auto;
+  display:flex;align-items:center;gap:16px;
+  height:56px;
+}
+.logo{
+  font-family:'JetBrains Mono',monospace;font-size:1.15rem;font-weight:700;
+  color:var(--accent);display:flex;align-items:center;gap:6px;text-decoration:none;
+}
+.logo b{color:var(--text)}
+.logo-tag{
+  font-size:.65rem;font-weight:700;letter-spacing:.08em;
+  padding:2px 8px;border-radius:10px;
+  background:rgba(79,142,247,.15);color:var(--accent);border:1px solid rgba(79,142,247,.3);
+  text-transform:uppercase;
+}
+.toc-nav{margin-left:auto;display:flex;gap:6px;flex-wrap:wrap}
+.toc-nav a{
+  font-size:.73rem;color:var(--text2);text-decoration:none;padding:4px 10px;
+  border-radius:20px;border:1px solid var(--border);transition:all .15s;white-space:nowrap;
+}
+.toc-nav a:hover{color:var(--accent);border-color:var(--accent);background:rgba(79,142,247,.08)}
+
+/* ─── HERO ─── */
+.hero{
+  background:linear-gradient(160deg,var(--bg2) 0%,rgba(79,142,247,.06) 50%,rgba(139,92,246,.06) 100%);
+  border-bottom:1px solid var(--border);
+  padding:60px 24px 50px;text-align:center;
+  position:relative;overflow:hidden;
+}
+.hero::before{
+  content:'';position:absolute;inset:0;
+  background:radial-gradient(ellipse 60% 50% at 50% 0%,rgba(79,142,247,.12),transparent);
+  pointer-events:none;
+}
+.hero-icon{font-size:3rem;display:block;margin-bottom:16px;filter:drop-shadow(0 0 20px rgba(79,142,247,.5))}
+.hero h1{
+  font-family:'JetBrains Mono',monospace;font-size:clamp(1.8rem,5vw,2.8rem);
+  font-weight:700;color:#fff;letter-spacing:-.5px;margin-bottom:12px;
+}
+.hero h1 span{color:var(--accent)}
+.hero-sub{font-size:1rem;color:var(--text2);max-width:560px;margin:0 auto 28px;line-height:1.8}
+.hero-badges{display:flex;gap:8px;justify-content:center;flex-wrap:wrap}
+.hbadge{
+  font-size:.73rem;font-weight:600;padding:5px 12px;border-radius:20px;
+  display:inline-flex;align-items:center;gap:5px;
+}
+.hbadge.b1{background:rgba(79,142,247,.2);border:1px solid rgba(79,142,247,.4);color:#93c5fd}
+.hbadge.b2{background:rgba(16,185,129,.2);border:1px solid rgba(16,185,129,.4);color:#6ee7b7}
+.hbadge.b3{background:rgba(245,158,11,.2);border:1px solid rgba(245,158,11,.4);color:#fcd34d}
+.hbadge.b4{background:rgba(139,92,246,.2);border:1px solid rgba(139,92,246,.4);color:#c4b5fd}
+
+/* ─── LAYOUT ─── */
+.page{max-width:960px;margin:0 auto;padding:40px 24px 80px}
+
+/* ─── SECTION ─── */
+.section{margin-bottom:56px}
+.section-anchor{display:block;height:80px;margin-top:-80px;visibility:hidden}
+.sec-head{
+  display:flex;align-items:center;gap:12px;
+  margin-bottom:24px;padding-bottom:14px;
+  border-bottom:1px solid var(--border);
+}
+.sec-num{
+  font-family:'JetBrains Mono',monospace;font-size:.72rem;font-weight:700;
+  color:var(--accent);background:rgba(79,142,247,.1);border:1px solid rgba(79,142,247,.25);
+  padding:3px 8px;border-radius:6px;letter-spacing:.06em;white-space:nowrap;
+}
+.sec-head h2{font-size:1.2rem;font-weight:700;color:#fff}
+.sec-icon{font-size:1.3rem}
+
+/* ─── CARD ─── */
+.card{
+  background:var(--surface);border:1px solid var(--border);
+  border-radius:var(--r);padding:22px 24px;margin-bottom:14px;
+  box-shadow:var(--sh);
+}
+.card-sm{padding:14px 18px;margin-bottom:10px}
+
+/* ─── GRID ─── */
+.grid-2{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.grid-3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px}
+
+/* ─── COLOR RULES ─── */
+.color-card{
+  border-radius:var(--rs);overflow:hidden;box-shadow:var(--sh);
+}
+.color-band{height:44px;display:flex;align-items:center;padding:0 14px;gap:8px}
+.color-band .label{font-size:.85rem;font-weight:700;color:#fff;flex:1}
+.color-band .badges{display:flex;gap:4px}
+.cbadge{font-size:.6rem;padding:2px 6px;border-radius:8px;background:rgba(255,255,255,.22);color:#fff;font-weight:700}
+.b-ri{background:linear-gradient(135deg,#7f1d1d,#ef4444)}
+.b-r {background:linear-gradient(135deg,#7c2d12,#f97316)}
+.b-i {background:linear-gradient(135deg,#4c1d95,#8b5cf6)}
+.b-n {background:linear-gradient(135deg,#1f2937,#4b5563)}
+.color-body{background:var(--surface2);padding:10px 14px;font-size:.82rem;color:var(--text2)}
+
+/* ─── DUE BORDER DEMO ─── */
+.due-demo{border-radius:var(--rs);padding:10px 16px;font-size:.85rem;font-weight:600;margin-bottom:8px;display:flex;align-items:center;gap:10px}
+.due-demo.today{border:2px solid #ef4444;background:rgba(239,68,68,.08);color:#fca5a5}
+.due-demo.tmr{border:2px solid #f59e0b;background:rgba(245,158,11,.08);color:#fcd34d}
+.due-demo.past{border:2px solid rgba(220,220,255,.25);background:rgba(255,255,255,.02);color:var(--text2)}
+.due-demo.future{border:2px solid var(--border2);background:var(--surface2);color:var(--text2)}
+
+/* ─── SUB CARD DEMO ─── */
+.scard-demo{
+  display:flex;align-items:stretch;border-radius:7px;overflow:hidden;
+  background:var(--surface2);border:1.5px solid var(--border);margin-bottom:8px;
+}
+.sbar-demo{width:5px;flex-shrink:0}
+.sg{background:#22c55e}.sy{background:#eab308}.sr{background:#ef4444}.sb{background:#06b6d4}
+.scard-body{padding:9px 12px;flex:1}
+.scard-body .t{font-size:.85rem;font-weight:600;color:var(--text)}
+.scard-body .m{font-size:.74rem;color:var(--text2);margin-top:2px}
+.waiting-demo{position:relative}
+.dogear-demo{position:absolute;top:0;right:0;width:0;height:0;border-top:18px solid #06b6d4;border-left:18px solid transparent}
+.wbadge-demo{position:absolute;top:1px;right:2px;font-size:.58rem;color:#fff}
+
+/* ─── TAG COLOR DEMO ─── */
+.tag-row{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px}
+.tpill{font-size:.73rem;padding:3px 10px;border-radius:10px;font-weight:600;display:inline-block}
+
+/* ─── STEPS ─── */
+.steps{counter-reset:step}
+.step{
+  display:flex;gap:16px;margin-bottom:18px;align-items:flex-start;
+}
+.step-num{
+  font-family:'JetBrains Mono',monospace;font-size:.8rem;font-weight:700;
+  min-width:28px;height:28px;border-radius:50%;
+  background:rgba(79,142,247,.15);border:1px solid rgba(79,142,247,.35);
+  color:var(--accent);display:flex;align-items:center;justify-content:center;
+  flex-shrink:0;margin-top:2px;
+}
+.step-body h4{font-size:.9rem;font-weight:700;color:var(--text);margin-bottom:4px}
+.step-body p{font-size:.85rem;color:var(--text2);line-height:1.65}
+
+/* ─── TABLE ─── */
+.tbl{width:100%;border-collapse:collapse;font-size:.85rem}
+.tbl th{background:var(--surface2);color:var(--text2);font-weight:600;padding:10px 14px;text-align:left;border-bottom:1px solid var(--border2);font-size:.78rem;letter-spacing:.04em}
+.tbl td{padding:10px 14px;border-bottom:1px solid var(--border);color:var(--text);vertical-align:top;line-height:1.6}
+.tbl tr:last-child td{border-bottom:none}
+.tbl tr:hover td{background:rgba(79,142,247,.04)}
+
+/* ─── HIGHLIGHT BOX ─── */
+.hbox{
+  border-radius:var(--rs);padding:14px 18px;margin-bottom:12px;
+  display:flex;gap:12px;align-items:flex-start;font-size:.85rem;line-height:1.65;
+}
+.hbox.info{background:rgba(79,142,247,.1);border:1px solid rgba(79,142,247,.25);color:#93c5fd}
+.hbox.tip {background:rgba(16,185,129,.08);border:1px solid rgba(16,185,129,.2);color:#6ee7b7}
+.hbox.warn{background:rgba(245,158,11,.08);border:1px solid rgba(245,158,11,.2);color:#fcd34d}
+.hbox-icon{font-size:1.1rem;flex-shrink:0;margin-top:1px}
+.hbox b{color:#fff}
+
+/* ─── SHORTCUT ─── */
+.kbd{
+  font-family:'JetBrains Mono',monospace;font-size:.78rem;
+  padding:2px 7px;border-radius:4px;
+  background:var(--surface3);border:1px solid var(--border2);color:var(--text);
+  display:inline-block;
+}
+
+/* ─── FEATURE GRID ─── */
+.feat-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px}
+.feat-card{
+  background:var(--surface2);border:1px solid var(--border);border-radius:var(--rs);
+  padding:16px;transition:border-color .15s;
+}
+.feat-card:hover{border-color:var(--border2)}
+.feat-icon{font-size:1.5rem;margin-bottom:8px}
+.feat-title{font-size:.88rem;font-weight:700;color:var(--text);margin-bottom:5px}
+.feat-desc{font-size:.78rem;color:var(--text2);line-height:1.6}
+
+/* ─── DIVIDER ─── */
+.divider{height:1px;background:var(--border);margin:32px 0}
+
+/* ─── FOOTER ─── */
+.footer{
+  text-align:center;padding:32px 24px;
+  border-top:1px solid var(--border);
+  color:var(--text3);font-size:.8rem;
+  background:var(--bg2);
+}
+.footer .logo-small{font-family:'JetBrains Mono',monospace;color:var(--accent);font-weight:700}
+
+/* ─── RESPONSIVE ─── */
+@media(max-width:680px){
+  .grid-2,.grid-3{grid-template-columns:1fr}
+  .hero{padding:40px 16px 36px}
+  .hero h1{font-size:1.7rem}
+  .page{padding:28px 16px 60px}
+  .toc-nav{display:none}
+  .card{padding:16px}
+  .sec-head h2{font-size:1.05rem}
+  .tbl th,.tbl td{padding:8px 10px}
+}
+</style>
+</head>
+<body>
+
+<!-- ─── STICKY HEADER ─── -->
+<header class="site-header">
+  <div class="header-inner">
+    <a class="logo" href="#">⚡<b>Task</b>Board <span class="logo-tag">README</span></a>
+    <nav class="toc-nav">
+      <a href="#overview">概要</a>
+      <a href="#features">機能一覧</a>
+      <a href="#colors">色分け</a>
+      <a href="#subcards">小カード</a>
+      <a href="#routine">ルーチン</a>
+      <a href="#howto">操作方法</a>
+      <a href="#filter">検索</a>
+      <a href="#csv">CSV</a>
+    </nav>
+  </div>
+</header>
+
+<!-- ─── HERO ─── -->
+<div class="hero">
+  <span class="hero-icon">⚡</span>
+  <h1><span>Task</span>Board</h1>
+  <p class="hero-sub">タスクを直感的に管理するカンバン型ボード。<br>緊急度・重要度・期日・担当者をひと目で把握し、チームと個人の仕事を効率化します。</p>
+  <div class="hero-badges">
+    <span class="hbadge b1">📋 カード管理</span>
+    <span class="hbadge b2">🔄 ルーチン対応</span>
+    <span class="hbadge b3">📅 期日トラッキング</span>
+    <span class="hbadge b4">📊 CSVエクスポート</span>
+  </div>
+</div>
+
+<div class="page">
+
+  <!-- ══════════════════════════════════════ -->
+  <!-- 1. 概要 -->
+  <!-- ══════════════════════════════════════ -->
+  <span class="section-anchor" id="overview"></span>
+  <div class="section">
+    <div class="sec-head">
+      <span class="sec-num">01</span>
+      <span class="sec-icon">📌</span>
+      <h2>アプリ概要</h2>
+    </div>
+
+    <div class="card">
+      <p style="color:var(--text);font-size:.95rem;line-height:1.9">
+        <strong style="color:#fff">TaskBoard</strong> は、ブラウザ上で動作する軽量カンバン型タスク管理ツールです。インストール不要・サーバー不要で、すべてのデータはブラウザの <strong style="color:#fff">LocalStorage</strong> に自動保存されます。
+      </p>
+      <div style="margin-top:18px;display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:12px">
+        <div style="background:var(--surface2);border-radius:8px;padding:14px;border:1px solid var(--border)">
+          <div style="font-size:1.4rem;margin-bottom:6px">🗂️</div>
+          <div style="font-size:.85rem;font-weight:700;color:#fff;margin-bottom:4px">大カード（親カード）</div>
+          <div style="font-size:.78rem;color:var(--text2)">プロジェクトや大きなタスク単位で管理。緊急度・重要度・タグで分類。</div>
+        </div>
+        <div style="background:var(--surface2);border-radius:8px;padding:14px;border:1px solid var(--border)">
+          <div style="font-size:1.4rem;margin-bottom:6px">✅</div>
+          <div style="font-size:.85rem;font-weight:700;color:#fff;margin-bottom:4px">小カード（サブタスク）</div>
+          <div style="font-size:.78rem;color:var(--text2)">大カード内の具体的な作業。作業量・担当者・期日を個別に設定可能。</div>
+        </div>
+        <div style="background:var(--surface2);border-radius:8px;padding:14px;border:1px solid var(--border)">
+          <div style="font-size:1.4rem;margin-bottom:6px">🔄</div>
+          <div style="font-size:.85rem;font-weight:700;color:#fff;margin-bottom:4px">ルーチンカード</div>
+          <div style="font-size:.78rem;color:var(--text2)">毎日・毎週・毎月の繰り返しタスク。完了後に次回期日を自動計算。</div>
+        </div>
+        <div style="background:var(--surface2);border-radius:8px;padding:14px;border:1px solid var(--border)">
+          <div style="font-size:1.4rem;margin-bottom:6px">💾</div>
+          <div style="font-size:.85rem;font-weight:700;color:#fff;margin-bottom:4px">自動保存</div>
+          <div style="font-size:.78rem;color:var(--text2)">操作のたびに LocalStorage へ自動保存。ページを閉じてもデータが残ります。</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════ -->
+  <!-- 2. 機能一覧 -->
+  <!-- ══════════════════════════════════════ -->
+  <span class="section-anchor" id="features"></span>
+  <div class="section">
+    <div class="sec-head">
+      <span class="sec-num">02</span>
+      <span class="sec-icon">⚡</span>
+      <h2>主な機能一覧</h2>
+    </div>
+
+    <div class="feat-grid">
+      <div class="feat-card">
+        <div class="feat-icon">🎨</div>
+        <div class="feat-title">優先度カラーコード</div>
+        <div class="feat-desc">緊急度×重要度の組み合わせでカードの上部バンドが自動着色。ひと目で優先度を判断できます。</div>
+      </div>
+      <div class="feat-card">
+        <div class="feat-icon">🏷️</div>
+        <div class="feat-title">タグ色管理</div>
+        <div class="feat-desc">タグに12色から色を設定。最初のタグ色がカード背景に反映されます。</div>
+      </div>
+      <div class="feat-card">
+        <div class="feat-icon">📅</div>
+        <div class="feat-title">期日トラッキング</div>
+        <div class="feat-desc">今日・明日・期限切れを色付きボーダーで表示。上部バッジで件数確認・クリック絞り込み対応。</div>
+      </div>
+      <div class="feat-card">
+        <div class="feat-icon">📊</div>
+        <div class="feat-title">進捗バー</div>
+        <div class="feat-desc">サブタスクの完了数を親カード上でグラフィカルに表示。「X/Y完了」と数値も確認可能。</div>
+      </div>
+      <div class="feat-card">
+        <div class="feat-icon">🔁</div>
+        <div class="feat-title">ドラッグ＆ドロップ</div>
+        <div class="feat-desc">大カード・小カードともにドラッグで順番入替。スマホのタッチ操作にも対応。</div>
+      </div>
+      <div class="feat-card">
+        <div class="feat-icon">🔍</div>
+        <div class="feat-title">多軸フィルター</div>
+        <div class="feat-desc">キーワード・タグ・カテゴリ・優先度で絞り込み。サブタスク名・担当者名も検索対象。</div>
+      </div>
+      <div class="feat-card">
+        <div class="feat-icon">🔄</div>
+        <div class="feat-title">ルーチンタスク</div>
+        <div class="feat-desc">毎日・毎週・毎月の繰り返し設定。完了時に次回期日を自動計算し、履歴を記録。</div>
+      </div>
+      <div class="feat-card">
+        <div class="feat-icon">📁</div>
+        <div class="feat-title">CSVエクスポート</div>
+        <div class="feat-desc">全カード・サブタスクのデータをCSV出力。Excel・スプレッドシートで分析可能。</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════ -->
+  <!-- 3. 色分けルール -->
+  <!-- ══════════════════════════════════════ -->
+  <span class="section-anchor" id="colors"></span>
+  <div class="section">
+    <div class="sec-head">
+      <span class="sec-num">03</span>
+      <span class="sec-icon">🎨</span>
+      <h2>カードの色分けルール</h2>
+    </div>
+
+    <!-- 緊急度×重要度 -->
+    <div class="card">
+      <h3 style="font-size:.95rem;font-weight:700;color:#fff;margin-bottom:16px">🔴 上部バンドの色（緊急度 × 重要度）</h3>
+      <div class="grid-2">
+        <div class="color-card">
+          <div class="color-band b-ri"><span class="label">緊急 × 重要</span><div class="badges"><span class="cbadge">緊急</span><span class="cbadge">重要</span></div></div>
+          <div class="color-body">最優先で対応が必要なタスク。赤のグラデーションで強調。</div>
+        </div>
+        <div class="color-card">
+          <div class="color-band b-r"><span class="label">緊急のみ</span><div class="badges"><span class="cbadge">緊急</span></div></div>
+          <div class="color-body">急ぎだが重要度は低め。オレンジ系で即対応を促す。</div>
+        </div>
+        <div class="color-card">
+          <div class="color-band b-i"><span class="label">重要のみ</span><div class="badges"><span class="cbadge">重要</span></div></div>
+          <div class="color-body">重要だが急ぎではない。紫系で戦略的タスクを示す。</div>
+        </div>
+        <div class="color-card">
+          <div class="color-band b-n"><span class="label">その他</span></div>
+          <div class="color-body">緊急でも重要でもないタスク。グレーで通常表示。</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 期日枠の色 -->
+    <div class="card">
+      <h3 style="font-size:.95rem;font-weight:700;color:#fff;margin-bottom:16px">📅 期日枠の色（大カード・小カード共通）</h3>
+      <div class="due-demo today">🔴 <strong>赤ボーダー</strong>　—　期日が <strong>今日</strong></div>
+      <div class="due-demo tmr">🟡 <strong>黄ボーダー</strong>　—　期日が <strong>明日</strong></div>
+      <div class="due-demo past">⚪ <strong>薄白ボーダー</strong>　—　期日が <strong>昨日以前（期限切れ）</strong></div>
+      <div class="due-demo future">　　<strong>標準ボーダー</strong>　—　期日が <strong>明後日以降</strong>、または期日なし</div>
+      <div class="hbox info" style="margin-top:12px">
+        <span class="hbox-icon">💡</span>
+        <span>画面上部の <b>「今日 X件」「明日 X件」</b> バッジをクリックすると、該当期日のカードだけに絞り込まれます。もう一度クリックで解除。ロゴ（⚡TaskBoard）クリックで全フィルター解除。</span>
+      </div>
+    </div>
+
+    <!-- タグ色 -->
+    <div class="card">
+      <h3 style="font-size:.95rem;font-weight:700;color:#fff;margin-bottom:14px">🏷️ タグ色とカード背景色</h3>
+      <p style="font-size:.85rem;color:var(--text2);margin-bottom:14px;line-height:1.7">タグには12色から色を設定できます。<strong style="color:#fff">最初に設定したタグの色</strong>が、大カード下部の背景色（半透明）に反映されます。</p>
+      <div class="tag-row">
+        <span class="tpill" style="background:rgba(239,68,68,.25);color:#ef4444;border:1px solid rgba(239,68,68,.4)">🔴 仕事</span>
+        <span class="tpill" style="background:rgba(34,197,94,.25);color:#22c55e;border:1px solid rgba(34,197,94,.4)">🟢 個人</span>
+        <span class="tpill" style="background:rgba(139,92,246,.25);color:#8b5cf6;border:1px solid rgba(139,92,246,.4)">🟣 学習</span>
+        <span class="tpill" style="background:rgba(249,115,22,.25);color:#f97316;border:1px solid rgba(249,115,22,.4)">🟠 プロジェクト</span>
+        <span class="tpill" style="background:rgba(59,130,246,.25);color:#3b82f6;border:1px solid rgba(59,130,246,.4)">🔵 会議</span>
+        <span class="tpill" style="background:rgba(6,182,212,.25);color:#06b6d4;border:1px solid rgba(6,182,212,.4)">🩵 連絡</span>
+      </div>
+      <div class="hbox tip">
+        <span class="hbox-icon">✨</span>
+        <span>タグ追加後にカード追加画面の<b>カラーパレット</b>をクリックして色を設定します。同じタグを複数のカードで共有すると統一感が生まれます。</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════ -->
+  <!-- 4. 小カードの使い方 -->
+  <!-- ══════════════════════════════════════ -->
+  <span class="section-anchor" id="subcards"></span>
+  <div class="section">
+    <div class="sec-head">
+      <span class="sec-num">04</span>
+      <span class="sec-icon">✅</span>
+      <h2>小カードの使い方</h2>
+    </div>
+
+    <!-- 表示順 -->
+    <div class="card card-sm" style="margin-bottom:18px">
+      <div class="hbox info" style="margin-bottom:0">
+        <span class="hbox-icon">📐</span>
+        <span><b>表示順：下から上へ積み上げ</b>　—　最初に追加したサブタスクが一番下、後から追加するほど上に積み上がります。カード間の <b>「＋」ボタン</b> で任意の位置に挿入、ドラッグで順番を入れ替えできます。</span>
+      </div>
+    </div>
+
+    <!-- 作業量カラーバー -->
+    <div class="card">
+      <h3 style="font-size:.95rem;font-weight:700;color:#fff;margin-bottom:16px">🎨 左端カラーバー（作業量の目安）</h3>
+      <div class="scard-demo">
+        <div class="sbar-demo sg"></div>
+        <div class="scard-body"><div class="t">資料の読み込み</div><div class="m">🟢 軽度　—　30分以内など短時間で完了するタスク</div></div>
+      </div>
+      <div class="scard-demo">
+        <div class="sbar-demo sy"></div>
+        <div class="scard-body"><div class="t">プレゼン資料のレビュー</div><div class="m">🟡 1時間程度　—　集中して取り組む必要があるタスク</div></div>
+      </div>
+      <div class="scard-demo">
+        <div class="sbar-demo sr"></div>
+        <div class="scard-body"><div class="t">システム設計書の作成</div><div class="m">🔴 1時間以上　—　まとまった時間が必要な重い作業</div></div>
+      </div>
+      <div class="scard-demo waiting-demo">
+        <div class="dogear-demo"></div><span class="wbadge-demo">⏳</span>
+        <div class="sbar-demo sb"></div>
+        <div class="scard-body"><div class="t">見積もり確認</div><div class="m">🔵 他者待ち　—　自分以外の対応待ち。担当者名を記入できます</div></div>
+      </div>
+      <div class="hbox warn" style="margin-top:12px">
+        <span class="hbox-icon">⏳</span>
+        <span><b>他者待ちカード</b> は右上に角折り（ドッグイヤー）と ⏳バッジが表示されます。入力欄に担当者名を入力すると、カード上で名前を確認できます。</span>
+      </div>
+    </div>
+
+    <!-- 完了チェック -->
+    <div class="card">
+      <h3 style="font-size:.95rem;font-weight:700;color:#fff;margin-bottom:14px">☑️ 完了チェック</h3>
+      <table class="tbl">
+        <thead><tr><th>状態</th><th>見た目の変化</th></tr></thead>
+        <tbody>
+          <tr><td>未完了</td><td>通常の白文字・カラーバー表示</td></tr>
+          <tr><td>完了チェック済み</td><td>文字色がグレーに変わり、タイトルに取り消し線が入る</td></tr>
+          <tr><td>全サブタスク完了</td><td>親カードのタイトルにも取り消し線。「✅ 完了へ」ボタンが出現</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════ -->
+  <!-- 5. ルーチンカードの使い方 -->
+  <!-- ══════════════════════════════════════ -->
+  <span class="section-anchor" id="routine"></span>
+  <div class="section">
+    <div class="sec-head">
+      <span class="sec-num">05</span>
+      <span class="sec-icon">🔄</span>
+      <h2>ルーチンカードの使い方</h2>
+    </div>
+
+    <div class="card">
+      <div class="hbox info" style="margin-bottom:18px">
+        <span class="hbox-icon">🔄</span>
+        <span>ルーチンカードは通常カードと<b>同じエリアに混在表示</b>されます。上部バンドに <b>🔄 バッジ</b> が付いているものがルーチンカードです。</span>
+      </div>
+
+      <h3 style="font-size:.9rem;font-weight:700;color:#fff;margin-bottom:14px">繰り返し設定の種類</h3>
+      <table class="tbl" style="margin-bottom:20px">
+        <thead><tr><th>種類</th><th>設定内容</th><th>次回期日の計算例</th></tr></thead>
+        <tbody>
+          <tr><td>📅 毎日</td><td>設定なし（毎日繰り返す）</td><td>完了翌日が次回期日</td></tr>
+          <tr><td>📅 毎週</td><td>曜日を選択（月〜日）</td><td>次回の指定曜日が期日</td></tr>
+          <tr><td>📅 毎月</td><td>日付を選択（1〜31日）</td><td>翌月の指定日が期日</td></tr>
+        </tbody>
+      </table>
+
+      <h3 style="font-size:.9rem;font-weight:700;color:#fff;margin-bottom:14px">完了時のフロー</h3>
+      <div class="step"><div class="step-num">1</div><div class="step-body"><h4>全サブタスクにチェック</h4><p>すべてのサブタスクを完了にすると「✅ 完了へ」ボタンが出現します。</p></div></div>
+      <div class="step"><div class="step-num">2</div><div class="step-body"><h4>次回日程ダイアログが表示される</h4><p>繰り返し設定をもとに次回期日が自動計算されます。日付を確認・手動調整できます。</p></div></div>
+      <div class="step"><div class="step-num">3</div><div class="step-body"><h4>「この日程で更新」または「調整なし」</h4><p>「この日程で更新」で手動調整した日付を採用。「調整なし」で自動計算日をそのまま適用。</p></div></div>
+      <div class="step"><div class="step-num">4</div><div class="step-body"><h4>カードが次回モードにリセット</h4><p>期日が更新され、全サブタスクの完了チェックがリセットされます。完了履歴に記録されます。</p></div></div>
+
+      <div class="hbox tip" style="margin-top:8px">
+        <span class="hbox-icon">📋</span>
+        <span>完了履歴はページ下部の <b>「ルーチン完了履歴」</b> エリアで、日時付きで最大15件確認できます。</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════ -->
+  <!-- 6. 操作方法 -->
+  <!-- ══════════════════════════════════════ -->
+  <span class="section-anchor" id="howto"></span>
+  <div class="section">
+    <div class="sec-head">
+      <span class="sec-num">06</span>
+      <span class="sec-icon">🖱️</span>
+      <h2>操作方法</h2>
+    </div>
+
+    <div class="grid-2" style="margin-bottom:14px">
+      <!-- 大カード操作 -->
+      <div class="card">
+        <h3 style="font-size:.92rem;font-weight:700;color:#fff;margin-bottom:14px">🗂️ 大カード操作</h3>
+        <div class="step"><div class="step-num">＋</div><div class="step-body"><h4>カード追加</h4><p>右上「＋ カード追加」ボタンをクリック。タイトル・期日・カテゴリ・緊急度・重要度・タグ・メモ・ルーチン設定を入力。</p></div></div>
+        <div class="step"><div class="step-num">✏️</div><div class="step-body"><h4>カード編集</h4><p>カード下部の「✏️ 編集」ボタンをクリックして内容を更新できます。</p></div></div>
+        <div class="step"><div class="step-num">🗑</div><div class="step-body"><h4>カード削除</h4><p>「🗑」ボタンをクリック。確認ダイアログ後に削除されます。</p></div></div>
+        <div class="step"><div class="step-num">✅</div><div class="step-body"><h4>完了へ移動</h4><p>全サブタスク完了後に表示される「✅ 完了へ」ボタンで完了済みエリアへ移動。↩ ボタンで復元可能。</p></div></div>
+      </div>
+
+      <!-- 小カード操作 -->
+      <div class="card">
+        <h3 style="font-size:.92rem;font-weight:700;color:#fff;margin-bottom:14px">✅ 小カード操作</h3>
+        <div class="step"><div class="step-num">＋</div><div class="step-body"><h4>サブタスク追加</h4><p>カード内の「＋ サブタスクを追加」ボタンで挿入位置を選択して追加。名前・期日・作業量・担当者を設定。</p></div></div>
+        <div class="step"><div class="step-num">✏️</div><div class="step-body"><h4>サブタスク編集</h4><p>小カードにカーソルを当てると右側に✏️ボタンが表示されます。</p></div></div>
+        <div class="step"><div class="step-num">☑️</div><div class="step-body"><h4>完了チェック</h4><p>左端のチェックボックスをクリックで完了。もう一度クリックで未完了に戻せます。</p></div></div>
+        <div class="step"><div class="step-num">👤</div><div class="step-body"><h4>担当者入力（他者待ち）</h4><p>作業量を「🔵 他者待ち」にすると担当者名入力欄が表示されます。</p></div></div>
+      </div>
+    </div>
+
+    <!-- ドラッグ操作 -->
+    <div class="card">
+      <h3 style="font-size:.92rem;font-weight:700;color:#fff;margin-bottom:16px">🔁 ドラッグ＆ドロップ</h3>
+      <table class="tbl">
+        <thead><tr><th>操作対象</th><th>操作方法</th><th>効果</th></tr></thead>
+        <tbody>
+          <tr>
+            <td>大カード（PC）</td>
+            <td>カードをつかんで別カードの上にドロップ</td>
+            <td>並び順が入れ替わります</td>
+          </tr>
+          <tr>
+            <td>大カード（スマホ）</td>
+            <td>カードを長押しして指をスライド</td>
+            <td>タッチドラッグで並び替え</td>
+          </tr>
+          <tr>
+            <td>小カード（PC）</td>
+            <td>小カードをつかんで上下にドロップ</td>
+            <td>同一親カード内で順番入れ替え</td>
+          </tr>
+          <tr>
+            <td>小カード（スマホ）</td>
+            <td>小カードを長押しして指をスライド</td>
+            <td>タッチドラッグで順番入れ替え</td>
+          </tr>
+        </tbody>
+      </table>
+      <div class="hbox info" style="margin-top:12px">
+        <span class="hbox-icon">📅</span>
+        <span>右上「<b>📅 期日順</b>」ボタンをクリックすると期日の早い順にカードを自動並べ替え。もう一度クリックで手動順に戻ります。</span>
+      </div>
+    </div>
+
+    <!-- キーボード -->
+    <div class="card card-sm">
+      <h3 style="font-size:.88rem;font-weight:700;color:var(--text2);margin-bottom:10px">⌨️ キーボードショートカット</h3>
+      <div style="display:flex;gap:16px;flex-wrap:wrap;font-size:.83rem;color:var(--text2)">
+        <span><kbd class="kbd">Esc</kbd> — モーダルを閉じる</span>
+        <span><kbd class="kbd">Enter</kbd> — タグ入力を確定</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════ -->
+  <!-- 7. フィルター・検索 -->
+  <!-- ══════════════════════════════════════ -->
+  <span class="section-anchor" id="filter"></span>
+  <div class="section">
+    <div class="sec-head">
+      <span class="sec-num">07</span>
+      <span class="sec-icon">🔍</span>
+      <h2>フィルター・検索の使い方</h2>
+    </div>
+
+    <div class="card">
+      <p style="font-size:.85rem;color:var(--text2);margin-bottom:18px;line-height:1.7">画面上部のフィルターバーから、複数の条件を組み合わせてカードを絞り込めます。条件は同時に適用（AND検索）されます。</p>
+      <table class="tbl">
+        <thead><tr><th>フィルター</th><th>検索対象</th><th>使い方</th></tr></thead>
+        <tbody>
+          <tr>
+            <td>🔍 キーワード検索</td>
+            <td>大カード：タイトル・タグ・メモ<br>小カード：サブタスク名・担当者名</td>
+            <td>テキストを入力すると即時絞り込み</td>
+          </tr>
+          <tr>
+            <td>全カテゴリ</td>
+            <td>大カードの「大分類」フィールド</td>
+            <td>プルダウンから選択</td>
+          </tr>
+          <tr>
+            <td>全タグ</td>
+            <td>大カードのタグ</td>
+            <td>プルダウンから選択</td>
+          </tr>
+          <tr>
+            <td>優先度</td>
+            <td>緊急度・重要度フラグ</td>
+            <td>「緊急×重要」「緊急のみ」「重要のみ」「その他」から選択</td>
+          </tr>
+          <tr>
+            <td>📅 今日・明日バッジ</td>
+            <td>大カード・小カード両方の期日</td>
+            <td>バッジをクリックで絞り込み、もう一度で解除</td>
+          </tr>
+        </tbody>
+      </table>
+      <div class="hbox tip" style="margin-top:14px">
+        <span class="hbox-icon">⚡</span>
+        <span>左上の <b>⚡TaskBoard ロゴ</b> をクリックすると、すべてのフィルター・検索ワードを一括解除して全カード表示に戻ります。</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════ -->
+  <!-- 8. CSVエクスポート -->
+  <!-- ══════════════════════════════════════ -->
+  <span class="section-anchor" id="csv"></span>
+  <div class="section">
+    <div class="sec-head">
+      <span class="sec-num">08</span>
+      <span class="sec-icon">📊</span>
+      <h2>CSVエクスポートの使い方</h2>
+    </div>
+
+    <div class="card">
+      <div class="step"><div class="step-num">1</div><div class="step-body"><h4>「📊 CSV」ボタンをクリック</h4><p>画面右上のCSVボタンをクリックします。フィルター状態に関わらず<strong style="color:#fff">全カード・全サブタスク</strong>がエクスポートされます。</p></div></div>
+      <div class="step"><div class="step-num">2</div><div class="step-body"><h4>ファイルが自動ダウンロード</h4><p><code style="font-family:'JetBrains Mono',monospace;font-size:.82rem;color:var(--accent)">taskboard_YYYY-MM-DD.csv</code> という名前でダウンロードされます。</p></div></div>
+      <div class="step"><div class="step-num">3</div><div class="step-body"><h4>Excel・スプレッドシートで開く</h4><p>BOM付きUTF-8形式なので、Excelや Google スプレッドシートで日本語が文字化けせず開けます。</p></div></div>
+
+      <div class="divider"></div>
+
+      <h3 style="font-size:.9rem;font-weight:700;color:#fff;margin-bottom:12px">出力されるカラム</h3>
+      <table class="tbl">
+        <thead><tr><th>カラム名</th><th>内容</th></tr></thead>
+        <tbody>
+          <tr><td>ID</td><td>カードの一意識別子</td></tr>
+          <tr><td>タイトル</td><td>カードまたはサブタスクの名前</td></tr>
+          <tr><td>種別</td><td>「進行中」「完了」「サブタスク」のいずれか</td></tr>
+          <tr><td>期日</td><td>YYYY-MM-DD 形式の日付</td></tr>
+          <tr><td>カテゴリ</td><td>大カードに設定した大分類</td></tr>
+          <tr><td>緊急 / 重要</td><td>○ または空欄</td></tr>
+          <tr><td>タグ</td><td>セミコロン区切りのタグ一覧</td></tr>
+          <tr><td>メモ</td><td>カードのメモ欄テキスト</td></tr>
+          <tr><td>ルーチン</td><td>「daily」「weekly」「monthly」または空欄</td></tr>
+          <tr><td>サブ数 / 完了数</td><td>サブタスクの総数と完了数</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+</div><!-- /page -->
+
+<!-- ─── FOOTER ─── -->
+<footer class="footer">
+  <div style="margin-bottom:8px;font-size:1.2rem">⚡</div>
+  <div><span class="logo-small">TaskBoard</span> — シングルファイル HTML タスク管理ツール</div>
+  <div style="margin-top:6px;color:var(--text3)">データはブラウザの LocalStorage に自動保存されます</div>
+</footer>
+
+</body>
+</html>
