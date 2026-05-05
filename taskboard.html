@@ -185,6 +185,30 @@ body{font-family:'Noto Sans JP',sans-serif;background:var(--bg);color:var(--text
 .empty-st{text-align:center;padding:44px 20px;color:var(--text3);grid-column:1/-1;font-size:.9rem}
 .drag-ph{border:2px dashed var(--border2);border-radius:var(--r);background:rgba(79,142,247,.04);min-height:120px}
 
+/* ── DRAG HANDLE ── */
+.drag-handle{
+  display:none; /* PC では非表示 */
+  align-items:center;justify-content:center;
+  cursor:grab;color:rgba(255,255,255,.3);
+  font-size:1.2rem;letter-spacing:-.1em;
+  flex-shrink:0;touch-action:none;
+  -webkit-user-select:none;user-select:none;
+  transition:color .15s;
+}
+.drag-handle:active{color:rgba(255,255,255,.75);cursor:grabbing}
+/* 長押しリフトアニメーション */
+@keyframes lift-card{
+  0%  {transform:scale(1)   translateY(0);  box-shadow:var(--sh)}
+  60% {transform:scale(1.025)translateY(-5px);box-shadow:0 20px 52px rgba(0,0,0,.75),0 0 0 2px var(--accent)}
+  100%{transform:scale(1.02) translateY(-3px);box-shadow:0 16px 44px rgba(0,0,0,.7),  0 0 0 2px var(--accent)}
+}
+@keyframes lift-sub{
+  0%  {transform:scale(1)}
+  100%{transform:scale(1.04);box-shadow:0 8px 28px rgba(0,0,0,.65),0 0 0 2px var(--accent)}
+}
+.pcard.lifting{animation:lift-card .35s ease forwards;z-index:10;position:relative}
+.scard.lifting-s{animation:lift-sub .3s ease forwards;z-index:5;position:relative}
+
 /* ── RESPONSIVE ── */
 @media(max-width:640px){
   .hdr,.fbar,.main{padding-left:14px;padding-right:14px}
@@ -196,6 +220,32 @@ body{font-family:'Noto Sans JP',sans-serif;background:var(--bg);color:var(--text
   .fi,.fsel2,.fta,.fsel{font-size:16px} /* prevents zoom on iOS */
   .si{font-size:16px}
   .hdr-btns{gap:6px}
+}
+/* タッチデバイスのみドラッグハンドルを表示 */
+@media(pointer:coarse){
+  /* ハンドル表示 */
+  .drag-handle{display:flex}
+  /* 親カード用ハンドル：バンドの高さいっぱいに広がる */
+  .drag-handle-p{
+    min-width:38px;
+    align-self:stretch;
+    border-right:1px solid rgba(255,255,255,.1);
+    background:rgba(0,0,0,.15);
+    font-size:1.25rem;
+  }
+  /* 小カード用ハンドル */
+  .drag-handle-s{
+    min-width:32px;
+    align-self:stretch;
+    border-right:1px solid rgba(255,255,255,.07);
+    background:rgba(0,0,0,.1);
+    font-size:1.05rem;
+  }
+  /* スマホではカード全体のgrabカーソルを解除 */
+  .pcard{cursor:default}
+  .scard{cursor:default}
+  /* 小カードのアクションボタンはタップで常時表示 */
+  .s-acts{opacity:1}
 }
 </style>
 </head>
@@ -417,6 +467,7 @@ function renderCard(c){
 
   return`<div class="pcard ${dc} ${done?'done-st':''}" id="pcard-${c.id}" data-id="${c.id}" draggable="true">
     <div class="cband ${bandCls(c)}">
+      <div class="drag-handle drag-handle-p" data-handle="p" title="ドラッグして移動">⠿</div>
       <div class="ctitle${done?' done':''}">${esc(c.title)}</div>
       <div class="bbadges">${bands}</div>
     </div>
@@ -444,6 +495,7 @@ function renderSub(pid,s){
   return`<div class="scard ${dc} ${s.completed?'s-done':''}" id="sc-${s.id}" data-subid="${s.id}" data-pid="${pid}" draggable="true">
     ${dogEar}
     <div class="sbar ${barC}"></div>
+    <div class="drag-handle drag-handle-s" data-handle="s" title="ドラッグして移動">⠿</div>
     <div class="s-content">
       <div class="s-top">
         <input type="checkbox" class="s-chk" ${s.completed?'checked':''} onchange="toggleSub('${pid}','${s.id}',this.checked)" onclick="event.stopPropagation()">
@@ -760,6 +812,7 @@ function pushRoutHist(c,nd){
 // DRAG & DROP — PARENT CARDS
 // ─────────────────────────────────────────────
 let dragId=null,touchDragEl=null,touchClone=null,touchSX,touchSY;
+let ptTimer=null,ptDragActive=false; // ①長押し管理
 
 function initPDrag(){
   document.querySelectorAll('.pcard').forEach(el=>{
@@ -768,6 +821,7 @@ function initPDrag(){
     el.addEventListener('touchstart',ptStart,{passive:true});
     el.addEventListener('touchmove',ptMove,{passive:false});
     el.addEventListener('touchend',ptEnd);
+    el.addEventListener('touchcancel',ptCancel);
   });
 }
 
@@ -784,37 +838,83 @@ function pdDrop(e){
 function pdEnd(e){e.currentTarget.classList.remove('dragging');document.querySelectorAll('.pcard').forEach(c=>c.classList.remove('drag-ov'));dragId=null}
 
 function ptStart(e){
-  // ① 小カード上のタッチは親ドラッグを起動しない
+  // 小カード上は親ドラッグを起動しない
   if(e.target.closest('.scard'))return;
-  touchSX=e.touches[0].clientX;touchSY=e.touches[0].clientY;touchDragEl=e.currentTarget
+  const t=e.touches[0];
+  touchSX=t.clientX;touchSY=t.clientY;
+  touchDragEl=e.currentTarget;
+  ptDragActive=false;
+  if(ptTimer){clearTimeout(ptTimer);ptTimer=null}
+
+  if(e.target.closest('.drag-handle[data-handle="p"]')){
+    // ① ハンドルタッチ → 即ドラッグモード
+    ptDragActive=true;
+  } else {
+    // ① 長押し1秒でドラッグモード開始
+    ptTimer=setTimeout(()=>{
+      if(!touchDragEl)return;
+      ptDragActive=true;
+      navigator.vibrate&&navigator.vibrate(50);
+      touchDragEl.classList.add('lifting');
+      setTimeout(()=>{if(touchDragEl)touchDragEl.classList.remove('lifting')},400);
+    },1000);
+  }
 }
+
 function ptMove(e){
-  if(!touchDragEl)return;const t=e.touches[0];
-  if(Math.abs(t.clientX-touchSX)<8&&Math.abs(t.clientY-touchSY)<8)return;
-  e.preventDefault();
+  if(!touchDragEl)return;
+  const t=e.touches[0];
+  const dx=Math.abs(t.clientX-touchSX),dy=Math.abs(t.clientY-touchSY);
+
+  // 長押し待機中に指が動いたらキャンセル → スクロール優先
+  if(ptTimer&&(dx>10||dy>10)){
+    clearTimeout(ptTimer);ptTimer=null;
+    touchDragEl.classList.remove('lifting');
+    touchDragEl=null;return;
+  }
+
+  if(!ptDragActive)return; // ドラッグモード未開始 → スクロールに委ねる
+
+  e.preventDefault(); // ドラッグ中のみスクロールをブロック
   if(!touchClone){
     touchClone=touchDragEl.cloneNode(true);
     touchClone.style.cssText=`position:fixed;width:${touchDragEl.offsetWidth}px;opacity:.75;pointer-events:none;z-index:9999;transform:rotate(1.5deg);border-radius:var(--r);box-shadow:var(--shl)`;
-    document.body.appendChild(touchClone);touchDragEl.style.opacity='.25';dragId=touchDragEl.dataset.id;
+    document.body.appendChild(touchClone);
+    touchDragEl.style.opacity='.25';
+    touchDragEl.classList.remove('lifting');
+    dragId=touchDragEl.dataset.id;
   }
-  touchClone.style.left=(t.clientX-touchDragEl.offsetWidth/2)+'px';touchClone.style.top=(t.clientY-40)+'px';
+  touchClone.style.left=(t.clientX-touchDragEl.offsetWidth/2)+'px';
+  touchClone.style.top=(t.clientY-40)+'px';
   const over=document.elementFromPoint(t.clientX,t.clientY)?.closest('.pcard');
   document.querySelectorAll('.pcard').forEach(c=>c.classList.remove('drag-ov'));
   if(over&&over!==touchDragEl)over.classList.add('drag-ov');
 }
+
 function ptEnd(e){
-  if(touchClone){
-    const t=e.changedTouches[0];
-    const tgt=document.elementFromPoint(t.clientX,t.clientY)?.closest('.pcard');
-    if(tgt&&tgt.dataset.id&&tgt.dataset.id!==dragId){
-      const si=S.cards.findIndex(c=>c.id===dragId),ti=S.cards.findIndex(c=>c.id===tgt.dataset.id);
-      if(si>=0&&ti>=0){const[sc]=S.cards.splice(si,1);S.cards.splice(ti,0,sc);S.cards.forEach((c,i)=>c.order=i);render()}
-    }
-    touchClone.remove();touchClone=null;
-    if(touchDragEl)touchDragEl.style.opacity='';
-    document.querySelectorAll('.pcard').forEach(c=>c.classList.remove('drag-ov'));
-    dragId=null;touchDragEl=null;
+  if(ptTimer){clearTimeout(ptTimer);ptTimer=null}
+  if(touchDragEl)touchDragEl.classList.remove('lifting');
+  if(!ptDragActive||!touchClone){
+    touchDragEl=null;ptDragActive=false;return;
   }
+  const t=e.changedTouches[0];
+  const tgt=document.elementFromPoint(t.clientX,t.clientY)?.closest('.pcard');
+  if(tgt&&tgt.dataset.id&&tgt.dataset.id!==dragId){
+    const si=S.cards.findIndex(c=>c.id===dragId),ti=S.cards.findIndex(c=>c.id===tgt.dataset.id);
+    if(si>=0&&ti>=0){const[sc]=S.cards.splice(si,1);S.cards.splice(ti,0,sc);S.cards.forEach((c,i)=>c.order=i);render()}
+  }
+  touchClone.remove();touchClone=null;
+  if(touchDragEl)touchDragEl.style.opacity='';
+  document.querySelectorAll('.pcard').forEach(c=>c.classList.remove('drag-ov'));
+  dragId=null;touchDragEl=null;ptDragActive=false;
+}
+function ptCancel(e){
+  if(ptTimer){clearTimeout(ptTimer);ptTimer=null}
+  if(touchDragEl)touchDragEl.classList.remove('lifting');
+  if(touchClone){touchClone.remove();touchClone=null}
+  if(touchDragEl)touchDragEl.style.opacity='';
+  document.querySelectorAll('.pcard').forEach(c=>c.classList.remove('drag-ov'));
+  dragId=null;touchDragEl=null;ptDragActive=false;
 }
 
 // ─────────────────────────────────────────────
@@ -822,15 +922,17 @@ function ptEnd(e){
 // ─────────────────────────────────────────────
 let dragSID=null,dragSPID=null;
 let sTouchEl=null,sTouchClone=null,sTouchSX,sTouchSY,sTouchSID,sTouchSPID;
+let stTimer=null,stDragActive=false; // ①長押し管理
 
 function initSDrag(){
   document.querySelectorAll('.scard').forEach(el=>{
     el.addEventListener('dragstart',sdStart);el.addEventListener('dragover',sdOver);
     el.addEventListener('drop',sdDrop);el.addEventListener('dragend',sdEnd);
-    // ① タッチ対応
+    // ①タッチ対応（長押し＋ハンドル）
     el.addEventListener('touchstart',stStart,{passive:true});
     el.addEventListener('touchmove',stMove,{passive:false});
     el.addEventListener('touchend',stEnd);
+    el.addEventListener('touchcancel',stCancel);
   });
 }
 function sdStart(e){e.stopPropagation();dragSID=e.currentTarget.dataset.subid;dragSPID=e.currentTarget.dataset.pid;e.currentTarget.classList.add('dragging-s');e.dataTransfer.effectAllowed='move'}
@@ -848,24 +950,52 @@ function sdDrop(e){
 }
 function sdEnd(e){e.currentTarget.classList.remove('dragging-s');document.querySelectorAll('.scard').forEach(s=>s.classList.remove('drag-ov-s'));dragSID=null;dragSPID=null}
 
-// ① 小カードタッチドラッグ
+// ①小カードタッチドラッグ（ハンドル即時 or 長押し1秒）
 function stStart(e){
   const t=e.touches[0];
   sTouchSX=t.clientX;sTouchSY=t.clientY;
   sTouchEl=e.currentTarget;sTouchSID=sTouchEl.dataset.subid;sTouchSPID=sTouchEl.dataset.pid;
+  stDragActive=false;
+  if(stTimer){clearTimeout(stTimer);stTimer=null}
+
+  if(e.target.closest('.drag-handle[data-handle="s"]')){
+    // ハンドルタッチ → 即ドラッグモード
+    stDragActive=true;
+  } else {
+    // 長押し1秒でドラッグモード
+    stTimer=setTimeout(()=>{
+      if(!sTouchEl)return;
+      stDragActive=true;
+      navigator.vibrate&&navigator.vibrate(50);
+      sTouchEl.classList.add('lifting-s');
+      setTimeout(()=>{if(sTouchEl)sTouchEl.classList.remove('lifting-s')},400);
+    },1000);
+  }
 }
 function stMove(e){
   if(!sTouchEl)return;
   const t=e.touches[0];
   const dx=Math.abs(t.clientX-sTouchSX),dy=Math.abs(t.clientY-sTouchSY);
-  if(dx<6&&dy<6)return;
+
+  // 長押し待機中に指が動いたらキャンセル → スクロール優先
+  if(stTimer&&(dx>10||dy>10)){
+    clearTimeout(stTimer);stTimer=null;
+    if(sTouchEl)sTouchEl.classList.remove('lifting-s');
+    sTouchEl=null;return;
+  }
+
+  if(!stDragActive)return; // ドラッグモード未開始 → スクロールに委ねる
+
   e.preventDefault();e.stopPropagation();
   // 親カードのタッチドラッグを無効化
   touchDragEl=null;if(touchClone){touchClone.remove();touchClone=null}
+
   if(!sTouchClone){
     sTouchClone=sTouchEl.cloneNode(true);
     sTouchClone.style.cssText=`position:fixed;width:${sTouchEl.offsetWidth}px;opacity:.78;pointer-events:none;z-index:9999;transform:rotate(1deg);border-radius:7px;box-shadow:var(--shl)`;
-    document.body.appendChild(sTouchClone);sTouchEl.style.opacity='.25';
+    document.body.appendChild(sTouchClone);
+    sTouchEl.style.opacity='.25';
+    sTouchEl.classList.remove('lifting-s');
   }
   sTouchClone.style.left=(t.clientX-sTouchEl.offsetWidth/2)+'px';
   sTouchClone.style.top=(t.clientY-24)+'px';
@@ -874,7 +1004,9 @@ function stMove(e){
   if(over&&over!==sTouchEl&&over.dataset.pid===sTouchSPID)over.classList.add('drag-ov-s');
 }
 function stEnd(e){
-  if(!sTouchClone){sTouchEl=null;return}
+  if(stTimer){clearTimeout(stTimer);stTimer=null}
+  if(sTouchEl)sTouchEl.classList.remove('lifting-s');
+  if(!stDragActive||!sTouchClone){sTouchEl=null;stDragActive=false;return}
   const t=e.changedTouches[0];
   const tgt=document.elementFromPoint(t.clientX,t.clientY)?.closest('.scard');
   if(tgt&&tgt.dataset.subid&&tgt.dataset.subid!==sTouchSID&&tgt.dataset.pid===sTouchSPID){
@@ -888,7 +1020,14 @@ function stEnd(e){
   sTouchClone.remove();sTouchClone=null;
   if(sTouchEl)sTouchEl.style.opacity='';
   document.querySelectorAll('.scard').forEach(s=>s.classList.remove('drag-ov-s'));
-  sTouchEl=null;sTouchSID=null;sTouchSPID=null;
+  sTouchEl=null;sTouchSID=null;sTouchSPID=null;stDragActive=false;
+}
+function stCancel(e){
+  if(stTimer){clearTimeout(stTimer);stTimer=null}
+  if(sTouchEl){sTouchEl.classList.remove('lifting-s');sTouchEl.style.opacity=''}
+  if(sTouchClone){sTouchClone.remove();sTouchClone=null}
+  document.querySelectorAll('.scard').forEach(s=>s.classList.remove('drag-ov-s'));
+  sTouchEl=null;sTouchSID=null;sTouchSPID=null;stDragActive=false;
 }
 
 // ─────────────────────────────────────────────
