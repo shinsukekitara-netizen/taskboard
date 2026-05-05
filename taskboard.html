@@ -663,8 +663,8 @@ function renderCard(c){
     <div class="cbody" style="background:${bg}">
       <div class="pchk-wrap">
         <input type="checkbox" class="pchk" id="pchk-${c.id}" ${isDone?'checked':''}
-          onchange="toggleCardDone('${c.id}',this.checked)" onclick="event.stopPropagation()">
-        <label for="pchk-${c.id}" class="pchk-label">${isDone?'完了済み — クリックで未完了に戻す':'完了にする'}</label>
+          onclick="event.stopPropagation();handleCardCheck('${c.id}',this)">
+        <label for="pchk-${c.id}" class="pchk-label" onclick="event.stopPropagation()">${isDone?'完了済み（クリックで戻す）':'完了にする'}</label>
       </div>
       ${pHtml}${dHtml}${tHtml}${mHtml}
       <div class="subcards">${scHtml}</div>
@@ -811,42 +811,63 @@ function applyFilters(){
 // CARD ACTIONS
 // ─────────────────────────────────────────────
 /* ── 大カード完了チェックボックス ── */
-function toggleCardDone(id,checked){
-  if(checked){
-    // ── チェック ON ──
-    // カードは S.cards にいるはず
-    const c=S.cards.find(x=>x.id===id);
-    if(!c)return;
+/* ════════════════════════════════════════════
+   大カード 完了チェック処理
+   onclick から直接呼ばれる（onchange は使わない）
+   ════════════════════════════════════════════ */
+function handleCardCheck(id, chkEl){
+  const nowChecked = chkEl.checked;
+
+  if(nowChecked){
+    // ── チェック ON：確認ポップアップ ──
+    const ok = confirm('このタスクを完了済みに移動しますか？');
+    if(!ok){
+      chkEl.checked = false;   // キャンセル → チェックを戻す
+      return;
+    }
+    const c = S.cards.find(x => x.id === id);
+    if(!c){ chkEl.checked = false; return; }
+
     if(c.isRoutine){
       // ルーチンは「次回へ」ダイアログ経由
-      document.getElementById('pchk-'+id).checked=false;
-      routCardId=id;
-      document.getElementById('rcTitle').textContent=c.title;
-      document.getElementById('nextDue').value=calcNext(c.routineType,c.routineDay,c.dueDate||today());
-      openModal('routModal');return;
+      chkEl.checked = false;
+      routCardId = id;
+      document.getElementById('rcTitle').textContent = c.title;
+      document.getElementById('nextDue').value = calcNext(c.routineType, c.routineDay, c.dueDate||today());
+      openModal('routModal');
+      return;
     }
-    c.completed=true;
-    S.cards=S.cards.filter(x=>x.id!==id);
+    // 完了済みへ移動
+    c.completed = true;
+    S.cards = S.cards.filter(x => x.id !== id);
     S.done.unshift(c);
     toast('✅ 完了済みに移動しました');
-    // 完了済みエリアを自動展開
-    const cb=document.getElementById('compBoard');
-    if(cb&&cb.style.display==='none')toggleCompleted();
+    const cb = document.getElementById('compBoard');
+    if(cb && cb.style.display === 'none') toggleCompleted();
+
   } else {
-    // ── チェック OFF ──
-    // S.done にいれば復元、S.cards にいれば completed=false
-    const di=S.done.findIndex(x=>x.id===id);
-    if(di>=0){
-      const dc=S.done.splice(di,1)[0];
-      dc.completed=false;dc.order=S.cards.length;
+    // ── チェック OFF：進行中へ戻す ──
+    // 完了済みエリアのカードを探す
+    const di = S.done.findIndex(x => x.id === id);
+    if(di >= 0){
+      const dc = S.done.splice(di, 1)[0];
+      dc.completed = false;
+      dc.order = S.cards.length;
       S.cards.push(dc);
     } else {
-      const c=S.cards.find(x=>x.id===id);
-      if(c)c.completed=false;
+      // フォールバック：S.cards 側で completed フラグだけ落とす
+      const c = S.cards.find(x => x.id === id);
+      if(c) c.completed = false;
     }
     toast('↩ 進行中に戻しました');
   }
   render();
+}
+
+/* 後方互換エイリアス（念のため残す） */
+function toggleCardDone(id, checked){
+  const el = document.getElementById('pchk-' + id);
+  if(el){ el.checked = checked; handleCardCheck(id, el); }
 }
 
 function moveToComp(id){
@@ -894,17 +915,23 @@ function toggleSub(pid,sid,chk){
   const c=S.cards.find(x=>x.id===pid);if(!c)return;
   const s=c.subCards.find(x=>x.id===sid);if(!s)return;
   s.completed=chk;
-  // 全小カード完了 → 大カードを自動完了済みへ移動
+  // 全小カード完了 → 確認ポップアップ
   if(allDone(c)&&!c.completed){
     if(c.isRoutine){
       toast('🎉 全サブタスク完了！「🔄 次回へ」ボタンで完了できます');
     } else {
-      c.completed=true;
-      S.cards=S.cards.filter(x=>x.id!==pid);
-      S.done.unshift(c);
-      toast('🎉 全サブタスク完了！完了済みに移動しました');
-      const cb=document.getElementById('compBoard');
-      if(cb&&cb.style.display==='none')toggleCompleted();
+      render(); // 先にチェック状態を反映してから confirm
+      const ok=confirm('全タスク完了！\nこのカードを完了済みに移動しますか？');
+      if(ok){
+        c.completed=true;
+        S.cards=S.cards.filter(x=>x.id!==pid);
+        S.done.unshift(c);
+        toast('🎉 完了済みに移動しました');
+        const cb=document.getElementById('compBoard');
+        if(cb&&cb.style.display==='none')toggleCompleted();
+        render();
+      }
+      return;
     }
   }
   render();
