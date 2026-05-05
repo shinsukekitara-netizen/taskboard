@@ -453,17 +453,15 @@ let _binId=BIN_ID; // 常に固定
 let _online=navigator.onLine;
 
 /* ── Sync status UI ── */
-function setSyncUI(state,msg,showRetry=false,showReset=false){
+function setSyncUI(state,msg,showRetry=false){
   const dot=document.getElementById('syncDot');
   const msgEl=document.getElementById('syncMsg');
   const idEl=document.getElementById('syncId');
   const retry=document.getElementById('syncRetryBtn');
-  const reset=document.getElementById('syncResetBtn');
-  dot.className='sync-dot '+state;
-  msgEl.textContent=msg;
-  idEl.textContent='BIN: '+BIN_ID.slice(-8);
-  retry.style.display=showRetry?'':'none';
-  reset.style.display='none'; // BIN固定なので不要
+  if(dot)dot.className='sync-dot '+state;
+  if(msgEl)msgEl.textContent=msg;
+  if(idEl)idEl.textContent='BIN: '+BIN_ID.slice(-8);
+  if(retry)retry.style.display=showRetry?'':'none';
 }
 
 /* ── LocalStorage cache (fallback + debounce buffer) ── */
@@ -526,16 +524,21 @@ async function cloudLoad(isManual=false){
   setSyncUI('saving','データを読込中…');
   try{
     const res=await fetch(`${JBBASE}/${BIN_ID}/latest`,{
-      headers:{'X-Master-Key':JBKEY,'X-Bin-Meta':'false'}
+      headers:{'X-Master-Key':JBKEY}
     });
     if(!res.ok)throw new Error('HTTP '+res.status);
-    const d=await res.json();
-    applyData(d.record||d);
-    lsSave();localStorage.removeItem(LS_DIRTY);
+    const json=await res.json();
+    // JSONBin returns { record: {...}, metadata: {...} }
+    const data=json.record||json;
+    if(data&&(Array.isArray(data.cards)||Array.isArray(data.done))){
+      applyData(data);
+      lsSave();localStorage.removeItem(LS_DIRTY);
+    }
     if(!S.cards.length&&!S.done.length)addSample();
     render();
     setSyncUI('ok','読込完了 ✓'+(isManual?' （手動更新）':''));
   }catch(e){
+    console.error('cloudLoad error:',e);
     lsLoad();
     if(!S.cards.length&&!S.done.length)addSample();
     render();
