@@ -233,7 +233,26 @@ body{font-family:'Noto Sans JP',sans-serif;background:var(--bg);color:var(--text
 .pcard.lifting{animation:lift-card .35s ease forwards;z-index:10;position:relative}
 .scard.lifting-s{animation:lift-sub .3s ease forwards;z-index:5;position:relative}
 
-/* ── RESPONSIVE ── */
+/* ── CLOUD SYNC STATUS ── */
+.sync-bar{
+  display:flex;align-items:center;gap:6px;padding:5px 20px;
+  font-size:.72rem;font-family:'JetBrains Mono',monospace;
+  background:var(--bg);border-bottom:1px solid var(--border);
+  min-height:28px;
+}
+.sync-dot{width:7px;height:7px;border-radius:50%;flex-shrink:0;transition:background .3s}
+.sync-dot.ok   {background:#22c55e;box-shadow:0 0 6px rgba(34,197,94,.6)}
+.sync-dot.saving{background:#f59e0b;box-shadow:0 0 6px rgba(245,158,11,.6);animation:dot-blink .7s ease infinite}
+.sync-dot.err  {background:#ef4444;box-shadow:0 0 6px rgba(239,68,68,.6)}
+.sync-dot.off  {background:#4b5563}
+@keyframes dot-blink{0%,100%{opacity:1}50%{opacity:.35}}
+.sync-msg{color:var(--text3);letter-spacing:.03em;flex:1}
+.sync-id{color:var(--text3);font-size:.65rem;opacity:.6;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:120px}
+.sync-retry{padding:2px 8px;font-size:.7rem;background:rgba(79,142,247,.12);border:1px solid rgba(79,142,247,.3);border-radius:4px;color:var(--accent);cursor:pointer;white-space:nowrap}
+.sync-retry:hover{background:rgba(79,142,247,.22)}
+.sync-reset{padding:2px 8px;font-size:.7rem;background:rgba(239,68,68,.08);border:1px solid rgba(239,68,68,.2);border-radius:4px;color:#fca5a5;cursor:pointer;margin-left:4px;white-space:nowrap}
+.sync-reset:hover{background:rgba(239,68,68,.16)}
+
 @media(max-width:640px){
   .hdr,.fbar,.main{padding-left:14px;padding-right:14px}
   .board{grid-template-columns:1fr}
@@ -286,6 +305,14 @@ body{font-family:'Noto Sans JP',sans-serif;background:var(--bg);color:var(--text
     </div>
   </div>
 </header>
+
+<div class="sync-bar" id="syncBar">
+  <span class="sync-dot off" id="syncDot"></span>
+  <span class="sync-msg" id="syncMsg">初期化中…</span>
+  <span class="sync-id" id="syncId"></span>
+  <button class="sync-retry" id="syncRetryBtn" style="display:none" onclick="cloudLoad(true)">↺ 再試行</button>
+  <button class="sync-reset" id="syncResetBtn" style="display:none" onclick="resetBinId()">🔗 BIN再設定</button>
+</div>
 
 <div class="fbar">
   <div class="sw">
@@ -412,12 +439,180 @@ let curTagColor=TAG_COLORS[0],editTags=[],editCardId=null,editSubId=null,editPar
 let filteredCards=null;
 
 function gid(){return Date.now().toString(36)+Math.random().toString(36).slice(2,9)}
-function save(){try{localStorage.setItem('tb3',JSON.stringify(S))}catch(e){}}
-function load(){
+// ─────────────────────────────────────────────
+// CLOUD SYNC — JSONBin.io
+// ─────────────────────────────────────────────
+const JBKEY='$2a$10$Wl2JnLVl9bRo.H58Efb22.MjgvquQR.8XhUKvOUBh42NE6eiTDR7S';
+const JBBASE='https://api.jsonbin.io/v3/b';
+const LS_BIN='tb3_binId';
+const LS_DIRTY='tb3_dirty';
+const LS_CACHE='tb3_cache';
+
+let _saveTimer=null;   // debounce handle
+let _saving=false;     // prevent overlapping saves
+let _binId=localStorage.getItem(LS_BIN)||null;
+let _online=navigator.onLine;
+
+/* ── Sync status UI ── */
+function setSyncUI(state,msg,showRetry=false,showReset=false){
+  const dot=document.getElementById('syncDot');
+  const msgEl=document.getElementById('syncMsg');
+  const idEl=document.getElementById('syncId');
+  const retry=document.getElementById('syncRetryBtn');
+  const reset=document.getElementById('syncResetBtn');
+  dot.className='sync-dot '+state;
+  msgEl.textContent=msg;
+  idEl.textContent=_binId?'BIN: '+_binId.slice(-8):'';
+  retry.style.display=showRetry?'':'none';
+  reset.style.display=showReset?'':'none';
+}
+
+/* ── LocalStorage cache (fallback + debounce buffer) ── */
+function lsSave(){
   try{
-    const r=localStorage.getItem('tb3');
+    localStorage.setItem(LS_CACHE,JSON.stringify(S));
+    localStorage.setItem(LS_BIN,_binId||'');
+  }catch(e){}
+}
+function lsLoad(){
+  try{
+    const r=localStorage.getItem(LS_CACHE);
     if(r){const d=JSON.parse(r);S={...S,...d};S.cards=(S.cards||[]).map(nc);S.done=(S.done||[]).map(nc)}
   }catch(e){}
+}
+
+/* ── Apply loaded data ── */
+function applyData(d){
+  S={...S,...d};
+  S.cards=(S.cards||[]).map(nc);
+  S.done=(S.done||[]).map(nc);
+  S.tagColors=d.tagColors||{};
+  S.routHist=d.routHist||[];
+  S.sortedByDue=!!d.sortedByDue;
+}
+
+/* ── Create new BIN ── */
+async function createBin(){
+  setSyncUI('saving','BINを作成中…');
+  const res=await fetch(JBBASE,{
+    method:'POST',
+    headers:{'Content-Type':'application/json','X-Master-Key':JBKEY,'X-Bin-Name':'TaskBoard','X-Bin-Private':'true'},
+    body:JSON.stringify(S)
+  });
+  if(!res.ok)throw new Error('BIN作成失敗 '+res.status);
+  const j=await res.json();
+  _binId=j.metadata.id;
+  localStorage.setItem(LS_BIN,_binId);
+  lsSave();
+  setSyncUI('ok','クラウド保存済み ✓');
+  toast('☁️ 新しいBINを作成しました（ID: '+_binId.slice(-8)+'）');
+}
+
+/* ── Save to BIN (debounced) ── */
+function save(){
+  lsSave(); // immediately write to LS
+  localStorage.setItem(LS_DIRTY,'1');
+  if(!_online){setSyncUI('off','オフライン（ローカル保存済み）');return}
+  clearTimeout(_saveTimer);
+  _saveTimer=setTimeout(()=>cloudSave(),800);
+}
+
+async function cloudSave(){
+  if(_saving)return;
+  if(!_binId){await cloudLoad(false);return}
+  _saving=true;
+  setSyncUI('saving','保存中…');
+  try{
+    const res=await fetch(`${JBBASE}/${_binId}`,{
+      method:'PUT',
+      headers:{'Content-Type':'application/json','X-Master-Key':JBKEY},
+      body:JSON.stringify(S)
+    });
+    if(!res.ok)throw new Error(res.status);
+    localStorage.removeItem(LS_DIRTY);
+    setSyncUI('ok','クラウド保存済み ✓');
+  }catch(e){
+    setSyncUI('err','保存失敗: '+e.message,true);
+    toast('⚠️ クラウド保存に失敗しました');
+  }finally{_saving=false}
+}
+
+/* ── Load from BIN ── */
+async function cloudLoad(isManual=false){
+  if(!_online){
+    lsLoad();
+    setSyncUI('off','オフライン（キャッシュから読込）');
+    if(!S.cards.length&&!S.done.length)addSample();
+    render();return;
+  }
+  if(!_binId){
+    // No BIN yet — try LS cache first, then create
+    lsLoad();
+    if(!S.cards.length&&!S.done.length)addSample();
+    render();
+    setSyncUI('saving','BINを初期化中…');
+    try{await createBin()}
+    catch(e){setSyncUI('err','BIN作成失敗: '+e.message,true,false)}
+    return;
+  }
+  setSyncUI('saving','データを読込中…');
+  try{
+    const res=await fetch(`${JBBASE}/${_binId}/latest`,{
+      headers:{'X-Master-Key':JBKEY,'X-Bin-Meta':'false'}
+    });
+    if(res.status===404){
+      // BIN not found — create new
+      _binId=null;localStorage.removeItem(LS_BIN);
+      await cloudLoad(false);return;
+    }
+    if(!res.ok)throw new Error(res.status);
+    const d=await res.json();
+    // d is the raw record (X-Bin-Meta:false returns the body directly)
+    applyData(d.record||d);
+    lsSave();localStorage.removeItem(LS_DIRTY);
+    if(!S.cards.length&&!S.done.length)addSample();
+    render();
+    setSyncUI('ok','読込完了 ✓'+(isManual?' （手動更新）':''));
+  }catch(e){
+    // Fall back to LS cache
+    lsLoad();
+    if(!S.cards.length&&!S.done.length)addSample();
+    render();
+    setSyncUI('err','読込失敗: '+e.message,true,true);
+    toast('⚠️ クラウド読込失敗。キャッシュを使用します');
+  }
+}
+
+/* ── Sync dirty data on reconnect ── */
+function resetBinId(){
+  if(!confirm('BIN IDをリセットして新しいBINを作成しますか？\n現在のデータはそのまま新しいBINに保存されます。'))return;
+  _binId=null;localStorage.removeItem(LS_BIN);
+  createBin().then(()=>setSyncUI('ok','新しいBINで保存済み ✓'));
+}
+
+/* ── Online / offline events ── */
+window.addEventListener('online',()=>{
+  _online=true;
+  if(localStorage.getItem(LS_DIRTY)){
+    setSyncUI('saving','オンライン復帰 — 同期中…');
+    cloudSave().then(()=>toast('☁️ オフライン中の変更を同期しました'));
+  }else{setSyncUI('ok','オンライン')}
+});
+window.addEventListener('offline',()=>{
+  _online=false;
+  setSyncUI('off','オフライン（ローカル保存中）');
+  toast('📴 オフラインです。変更はローカルに保存されます');
+});
+
+/* ── Legacy LS key migration ── */
+function load(){
+  // migrate old tb3 data if new cache doesn't exist
+  if(!localStorage.getItem(LS_CACHE)&&localStorage.getItem('tb3')){
+    try{
+      const r=localStorage.getItem('tb3');
+      if(r){const d=JSON.parse(r);S={...S,...d};S.cards=(S.cards||[]).map(nc);S.done=(S.done||[]).map(nc);lsSave();}
+    }catch(e){}
+  }
 }
 function nc(c){return{id:c.id||gid(),title:c.title||'',dueDate:c.dueDate||'',category:c.category||'',urgent:!!c.urgent,important:!!c.important,tags:c.tags||[],memo:c.memo||'',isRoutine:!!c.isRoutine,routineType:c.routineType||'daily',routineDay:c.routineDay??1,order:c.order??0,subCards:(c.subCards||[]).map(ns),completedHistory:c.completedHistory||[],createdAt:c.createdAt||Date.now()}}
 function ns(s){return{id:s.id||gid(),title:s.title||'',dueDate:s.dueDate||'',workAmount:s.workAmount||'light',waitingPerson:s.waitingPerson||'',completed:!!s.completed,order:s.order??0}}
@@ -1113,9 +1308,8 @@ function addSample(){
 
 document.addEventListener('keydown',e=>{if(e.key==='Escape')document.querySelectorAll('.mover.vis').forEach(m=>closeModal(m.id))});
 
-load();
-if(!S.cards.length&&!S.done.length)addSample();
-render();
+load(); // migrate legacy data if present
+cloudLoad(); // fetch from cloud (or LS cache if offline)
 </script>
 </body>
 </html>
