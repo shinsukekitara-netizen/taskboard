@@ -82,6 +82,16 @@ body{font-family:'Noto Sans JP',sans-serif;background:var(--bg);color:var(--text
 /* ── CARD BODY ── */
 .cbody{padding:10px 12px;border-radius:0 0 calc(var(--r) - 2px) calc(var(--r) - 2px)}
 
+/* ── PARENT CARD COMPLETE CHECKBOX ── */
+.pchk-wrap{display:flex;align-items:center;gap:8px;margin-bottom:8px;padding-bottom:8px;border-bottom:1px solid rgba(255,255,255,.06)}
+.pchk{width:17px;height:17px;border:2px solid rgba(255,255,255,.3);border-radius:4px;background:transparent;cursor:pointer;flex-shrink:0;appearance:none;position:relative;transition:all .15s}
+.pchk:hover{border-color:rgba(255,255,255,.55)}
+.pchk:checked{background:var(--ok);border-color:var(--ok);box-shadow:0 0 8px rgba(16,185,129,.5)}
+.pchk:checked::after{content:'✓';position:absolute;top:-2px;left:1px;font-size:11px;color:#fff;font-weight:bold}
+.pchk-label{font-size:.76rem;color:rgba(255,255,255,.5);user-select:none;cursor:pointer}
+.pcard.done-st{opacity:.55}
+.pcard.done-st .cbody{opacity:1} /* override old rule — card-level opacity handles it */
+
 /* ── PROGRESS ── */
 .prog-w{margin-bottom:8px}
 .prog-b{height:3px;background:rgba(255,255,255,.08);border-radius:2px;overflow:hidden}
@@ -571,7 +581,7 @@ function load(){
     }catch(e){}
   }
 }
-function nc(c){return{id:c.id||gid(),title:c.title||'',dueDate:c.dueDate||'',category:c.category||'',urgent:!!c.urgent,important:!!c.important,tags:c.tags||[],memo:c.memo||'',isRoutine:!!c.isRoutine,routineType:c.routineType||'daily',routineDay:c.routineDay??1,order:c.order??0,subCards:(c.subCards||[]).map(ns),completedHistory:c.completedHistory||[],createdAt:c.createdAt||Date.now()}}
+function nc(c){return{id:c.id||gid(),title:c.title||'',dueDate:c.dueDate||'',category:c.category||'',urgent:!!c.urgent,important:!!c.important,tags:c.tags||[],memo:c.memo||'',isRoutine:!!c.isRoutine,routineType:c.routineType||'daily',routineDay:c.routineDay??1,order:c.order??0,completed:!!c.completed,subCards:(c.subCards||[]).map(ns),completedHistory:c.completedHistory||[],createdAt:c.createdAt||Date.now()}}
 function ns(s){return{id:s.id||gid(),title:s.title||'',dueDate:s.dueDate||'',workAmount:s.workAmount||'light',waitingPerson:s.waitingPerson||'',completed:!!s.completed,order:s.order??0}}
 function esc(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;')}
 
@@ -615,7 +625,9 @@ let dueBadgeFilter=null; // 'today' | 'tmr' | null
 function render(){renderBoard();renderDone();renderBadges();renderHist();updateFilterOpts();save()}
 
 function renderCard(c){
-  const dc=dueCls(c.dueDate),done=allDone(c),p=prog(c),bg=cardBg(c);
+  // 完了状態: 手動フラグ OR 全小カード完了
+  const isDone=c.completed||allDone(c);
+  const dc=dueCls(c.dueDate),p=prog(c),bg=cardBg(c);
   const subs=[...c.subCards].sort((a,b)=>a.order-b.order);
 
   let bands='';
@@ -632,26 +644,32 @@ function renderCard(c){
   let dHtml=c.dueDate?`<div class="due-ch">📅 ${fmtD(c.dueDate)}${dueLabel(dc)}</div>`:'';
   let mHtml=c.memo?`<div class="memo-t">${esc(c.memo)}</div>`:'';
 
-  // Build sub-card list with insert buttons (column-reverse will flip visually)
+  // Sub-card list
   let scHtml='';
   for(let i=0;i<=subs.length;i++){
     scHtml+=`<button class="ins-btn" onclick="openInsertSub('${c.id}',${i})">＋ サブタスクを追加</button>`;
     if(i<subs.length)scHtml+=renderSub(c.id,subs[i]);
   }
 
-  let moveBtn=done?`<button class="btn bg bsm" onclick="moveToComp('${c.id}')">✅ 完了へ</button>`:'';
+  // Routine completion button (only for routine when all subs done)
+  const routBtn=c.isRoutine&&allDone(c)?`<button class="btn bg bsm" onclick="moveToComp('${c.id}')">🔄 次回へ</button>`:'';
 
-  return`<div class="pcard ${dc} ${done?'done-st':''}" id="pcard-${c.id}" data-id="${c.id}">
+  return`<div class="pcard ${dc} ${isDone?'done-st':''}" id="pcard-${c.id}" data-id="${c.id}">
     <div class="cband ${bandCls(c)}">
       <div class="drag-handle drag-handle-p" data-handle="p" title="ドラッグして移動">⠿</div>
-      <div class="ctitle${done?' done':''}">${esc(c.title)}</div>
+      <div class="ctitle${isDone?' done':''}">${esc(c.title)}</div>
       <div class="bbadges">${bands}</div>
     </div>
     <div class="cbody" style="background:${bg}">
+      <div class="pchk-wrap">
+        <input type="checkbox" class="pchk" id="pchk-${c.id}" ${isDone?'checked':''}
+          onchange="toggleCardDone('${c.id}',this.checked)" onclick="event.stopPropagation()">
+        <label for="pchk-${c.id}" class="pchk-label">${isDone?'完了済み — クリックで未完了に戻す':'完了にする'}</label>
+      </div>
       ${pHtml}${dHtml}${tHtml}${mHtml}
       <div class="subcards">${scHtml}</div>
       <div class="cacts">
-        ${moveBtn}
+        ${routBtn}
         <button class="btn bg bsm" onclick="openEditCard('${c.id}')">✏️ 編集</button>
         <button class="btn bd bsm" onclick="delCard('${c.id}')">🗑</button>
       </div>
@@ -705,13 +723,23 @@ function renderDone(){
   const b=document.getElementById('compBoard');
   document.getElementById('compCnt').textContent=S.done.length;
   if(!S.done.length){b.innerHTML='';return}
-  b.innerHTML=S.done.map(c=>`<div class="pcard done-st" style="opacity:.6">
-    <div class="cband ${bandCls(c)}"><div class="ctitle done">${esc(c.title)}</div></div>
+  b.innerHTML=S.done.map(c=>`<div class="pcard done-st" id="pcard-${c.id}">
+    <div class="cband ${bandCls(c)}">
+      <div class="ctitle done">${esc(c.title)}</div>
+      <div class="bbadges">${c.isRoutine?'<span class="bbadge">🔄</span>':''}</div>
+    </div>
     <div class="cbody" style="background:var(--surface)">
-      <div style="font-size:.76rem;color:var(--text3);margin-bottom:6px">${c.dueDate?'📅'+fmtD(c.dueDate):''} ${c.tags.map(t=>`<span class="tpill" style="background:${hex2rgba(getTColor(t),.18)};color:${getTColor(t)}">${esc(t)}</span>`).join('')}</div>
+      <div class="pchk-wrap">
+        <input type="checkbox" class="pchk" checked
+          onchange="restoreCard('${c.id}')" onclick="event.stopPropagation()">
+        <label class="pchk-label">完了済み — クリックで進行中に戻す</label>
+      </div>
+      <div style="font-size:.76rem;color:var(--text2);margin-bottom:6px;display:flex;align-items:center;gap:6px;flex-wrap:wrap">
+        ${c.dueDate?`<span>📅${fmtD(c.dueDate)}</span>`:''}
+        ${c.tags.map(t=>`<span class="tpill" style="background:${hex2rgba(getTColor(t),.18)};color:${getTColor(t)}">${esc(t)}</span>`).join('')}
+      </div>
       <div class="cacts">
-        <button class="btn bg bsm" onclick="restoreCard('${c.id}')">↩ 復元</button>
-        <button class="btn bd bsm" onclick="delDone('${c.id}')">🗑</button>
+        <button class="btn bd bsm" onclick="delDone('${c.id}')">🗑 削除</button>
       </div>
     </div>
   </div>`).join('')
@@ -782,23 +810,54 @@ function applyFilters(){
 // ─────────────────────────────────────────────
 // CARD ACTIONS
 // ─────────────────────────────────────────────
-function moveToComp(id){
+/* ── 大カード完了チェックボックス ── */
+function toggleCardDone(id,checked){
   const c=S.cards.find(x=>x.id===id);if(!c)return;
-  if(c.isRoutine){
-    routCardId=id;
-    document.getElementById('rcTitle').textContent=c.title;
-    document.getElementById('nextDue').value=calcNext(c.routineType,c.routineDay,c.dueDate||today());
-    openModal('routModal');return;
+  if(checked){
+    // チェック ON → 完了済みへ移動
+    if(c.isRoutine){
+      // ルーチンは「次回へ」ダイアログを使う
+      document.getElementById(`pchk-${id}`).checked=false; // 一旦戻す
+      routCardId=id;
+      document.getElementById('rcTitle').textContent=c.title;
+      document.getElementById('nextDue').value=calcNext(c.routineType,c.routineDay,c.dueDate||today());
+      openModal('routModal');return;
+    }
+    c.completed=true;
+    S.cards=S.cards.filter(x=>x.id!==id);
+    S.done.unshift(c);
+    toast('✅ 完了済みに移動しました');
+    // 完了済みエリアを自動展開
+    const cb=document.getElementById('compBoard');
+    if(cb&&cb.style.display==='none')toggleCompleted();
+  } else {
+    // チェック OFF → 進行中に戻す（done 側から）
+    const di=S.done.findIndex(x=>x.id===id);
+    if(di>=0){
+      const dc=S.done.splice(di,1)[0];
+      dc.completed=false;dc.order=S.cards.length;
+      S.cards.push(dc);toast('↩ 進行中に戻しました');
+    }
   }
-  S.cards=S.cards.filter(x=>x.id!==id);
-  S.done.unshift(c);toast('✅ 完了済みに移動しました');render();
+  render();
+}
+
+function moveToComp(id){
+  // ルーチン「次回へ」専用（renderCard の routBtn から呼ばれる）
+  const c=S.cards.find(x=>x.id===id);if(!c)return;
+  routCardId=id;
+  document.getElementById('rcTitle').textContent=c.title;
+  document.getElementById('nextDue').value=calcNext(c.routineType,c.routineDay,c.dueDate||today());
+  openModal('routModal');
 }
 
 function restoreCard(id){
+  // 完了済みエリアのチェック外しから呼ばれる
   const idx=S.done.findIndex(c=>c.id===id);if(idx<0)return;
   const c=S.done.splice(idx,1)[0];
-  c.subCards.forEach(s=>s.completed=false);c.order=S.cards.length;
-  S.cards.push(c);toast('↩ カードを復元しました');render();
+  c.completed=false;c.order=S.cards.length;
+  // 小カードの完了状態はそのまま維持
+  S.cards.push(c);toast('↩ 進行中に戻しました');render();
 }
 
 function delCard(id){if(!confirm('このカードを削除しますか？'))return;S.cards=S.cards.filter(c=>c.id!==id);toast('🗑 削除しました');render()}
@@ -829,7 +888,20 @@ function toggleSub(pid,sid,chk){
   const c=S.cards.find(x=>x.id===pid);if(!c)return;
   const s=c.subCards.find(x=>x.id===sid);if(!s)return;
   s.completed=chk;
-  if(allDone(c))toast('🎉 全サブタスク完了！「完了へ」ボタンが使えます');
+  if(allDone(c)&&!c.completed){
+    // 全小カード完了 → 大カードを自動完了 & 完了済みへ移動
+    if(c.isRoutine){
+      toast('🎉 全サブタスク完了！「🔄 次回へ」ボタンで完了できます');
+      render();return;
+    }
+    c.completed=true;
+    S.cards=S.cards.filter(x=>x.id!==pid);
+    S.done.unshift(c);
+    toast('🎉 全サブタスク完了！カードを完了済みに移動しました');
+    const cb=document.getElementById('compBoard');
+    if(cb&&cb.style.display==='none')toggleCompleted();
+    render();return;
+  }
   render();
 }
 
