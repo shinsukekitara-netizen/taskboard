@@ -625,8 +625,8 @@ let dueBadgeFilter=null; // 'today' | 'tmr' | null
 function render(){renderBoard();renderDone();renderBadges();renderHist();updateFilterOpts();save()}
 
 function renderCard(c){
-  // 完了状態: 手動フラグ OR 全小カード完了
-  const isDone=c.completed||allDone(c);
+  // 完了状態は c.completed のみで判定（allDone は進捗表示のみに使用）
+  const isDone=!!c.completed;
   const dc=dueCls(c.dueDate),p=prog(c),bg=cardBg(c);
   const subs=[...c.subCards].sort((a,b)=>a.order-b.order);
 
@@ -812,12 +812,14 @@ function applyFilters(){
 // ─────────────────────────────────────────────
 /* ── 大カード完了チェックボックス ── */
 function toggleCardDone(id,checked){
-  const c=S.cards.find(x=>x.id===id);if(!c)return;
   if(checked){
-    // チェック ON → 完了済みへ移動
+    // ── チェック ON ──
+    // カードは S.cards にいるはず
+    const c=S.cards.find(x=>x.id===id);
+    if(!c)return;
     if(c.isRoutine){
-      // ルーチンは「次回へ」ダイアログを使う
-      document.getElementById(`pchk-${id}`).checked=false; // 一旦戻す
+      // ルーチンは「次回へ」ダイアログ経由
+      document.getElementById('pchk-'+id).checked=false;
       routCardId=id;
       document.getElementById('rcTitle').textContent=c.title;
       document.getElementById('nextDue').value=calcNext(c.routineType,c.routineDay,c.dueDate||today());
@@ -831,13 +833,18 @@ function toggleCardDone(id,checked){
     const cb=document.getElementById('compBoard');
     if(cb&&cb.style.display==='none')toggleCompleted();
   } else {
-    // チェック OFF → 進行中に戻す（done 側から）
+    // ── チェック OFF ──
+    // S.done にいれば復元、S.cards にいれば completed=false
     const di=S.done.findIndex(x=>x.id===id);
     if(di>=0){
       const dc=S.done.splice(di,1)[0];
       dc.completed=false;dc.order=S.cards.length;
-      S.cards.push(dc);toast('↩ 進行中に戻しました');
+      S.cards.push(dc);
+    } else {
+      const c=S.cards.find(x=>x.id===id);
+      if(c)c.completed=false;
     }
+    toast('↩ 進行中に戻しました');
   }
   render();
 }
@@ -852,11 +859,10 @@ function moveToComp(id){
 }
 
 function restoreCard(id){
-  // 完了済みエリアのチェック外しから呼ばれる
   const idx=S.done.findIndex(c=>c.id===id);if(idx<0)return;
   const c=S.done.splice(idx,1)[0];
   c.completed=false;c.order=S.cards.length;
-  // 小カードの完了状態はそのまま維持
+  // 小カードの完了状態はそのまま維持（リセットしない）
   S.cards.push(c);toast('↩ 進行中に戻しました');render();
 }
 
@@ -888,19 +894,18 @@ function toggleSub(pid,sid,chk){
   const c=S.cards.find(x=>x.id===pid);if(!c)return;
   const s=c.subCards.find(x=>x.id===sid);if(!s)return;
   s.completed=chk;
+  // 全小カード完了 → 大カードを自動完了済みへ移動
   if(allDone(c)&&!c.completed){
-    // 全小カード完了 → 大カードを自動完了 & 完了済みへ移動
     if(c.isRoutine){
       toast('🎉 全サブタスク完了！「🔄 次回へ」ボタンで完了できます');
-      render();return;
+    } else {
+      c.completed=true;
+      S.cards=S.cards.filter(x=>x.id!==pid);
+      S.done.unshift(c);
+      toast('🎉 全サブタスク完了！完了済みに移動しました');
+      const cb=document.getElementById('compBoard');
+      if(cb&&cb.style.display==='none')toggleCompleted();
     }
-    c.completed=true;
-    S.cards=S.cards.filter(x=>x.id!==pid);
-    S.done.unshift(c);
-    toast('🎉 全サブタスク完了！カードを完了済みに移動しました');
-    const cb=document.getElementById('compBoard');
-    if(cb&&cb.style.display==='none')toggleCompleted();
-    render();return;
   }
   render();
 }
@@ -1087,7 +1092,7 @@ function initDrag(){
 /* ── Pointerdown — parent card ── */
 function _cardDown(e){
   if(e.button&&e.button!==0)return;
-  if(e.target.closest('button,.ins-btn,.s-chk,.wp-inp'))return;
+  if(e.target.closest('button,.ins-btn,.s-chk,.wp-inp,.pchk,label'))return;
   if(DG.on||DG.pending)return;
   const isTouch=e.pointerType==='touch';
   const onHandle=e.target.closest('.drag-handle[data-handle="p"]');
@@ -1109,7 +1114,7 @@ function _cardDown(e){
 /* ── Pointerdown — sub card ── */
 function _subDown(e){
   if(e.button&&e.button!==0)return;
-  if(e.target.closest('button,.ins-btn,.s-chk,.wp-inp'))return;
+  if(e.target.closest('button,.ins-btn,.s-chk,.wp-inp,.pchk,label'))return;
   if(DG.on||DG.pending)return;
   e.stopPropagation();
   const isTouch=e.pointerType==='touch';
