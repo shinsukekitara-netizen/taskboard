@@ -58,7 +58,8 @@ body{font-family:'Noto Sans JP',sans-serif;background:var(--bg);color:var(--text
 .board{display:grid;grid-template-columns:repeat(auto-fill,minmax(290px,1fr));gap:14px;align-items:start}
 
 /* ── PARENT CARD ── */
-.pcard{border-radius:var(--r);overflow:visible;border:2px solid var(--border);box-shadow:var(--sh);transition:all .2s;cursor:grab;user-select:none;position:relative}
+.pcard{border-radius:var(--r);overflow:visible;border:2px solid var(--border);box-shadow:var(--sh);cursor:grab;user-select:none;position:relative;
+  transition:transform .2s,box-shadow .2s,border-color .2s,opacity .2s,margin-top .13s,margin-bottom .13s}
 .pcard:hover{box-shadow:var(--shl);transform:translateY(-2px)}
 .pcard.dragging{opacity:.45;cursor:grabbing;transform:scale(.98)}
 .pcard.drag-ov{border-color:var(--accent)!important;box-shadow:0 0 0 3px rgba(79,142,247,.35)}
@@ -104,7 +105,8 @@ body{font-family:'Noto Sans JP',sans-serif;background:var(--bg);color:var(--text
 .add-sub-btn:hover{background:rgba(79,142,247,.12);border-color:rgba(79,142,247,.4);color:var(--accent)}
 
 /* ── SUB CARD ── */
-.scard{display:flex;align-items:stretch;background:var(--surface2);border-radius:7px;margin:2px 0;position:relative;overflow:hidden;border:1.5px solid transparent;transition:all .15s;cursor:grab}
+.scard{display:flex;align-items:stretch;background:var(--surface2);border-radius:7px;margin:2px 0;position:relative;overflow:hidden;border:1.5px solid transparent;cursor:grab;
+  transition:transform .14s,border-color .14s,background .14s,opacity .14s,margin-top .11s,margin-bottom .11s}
 .scard:hover{background:var(--surface3);border-color:var(--border)}
 .scard.dragging-s{opacity:.35;cursor:grabbing}
 .scard.drag-ov-s{border-color:var(--accent)!important}
@@ -185,6 +187,28 @@ body{font-family:'Noto Sans JP',sans-serif;background:var(--bg);color:var(--text
 .empty-st{text-align:center;padding:44px 20px;color:var(--text3);grid-column:1/-1;font-size:.9rem}
 .drag-ph{border:2px dashed var(--border2);border-radius:var(--r);background:rgba(79,142,247,.04);min-height:120px}
 
+/* ── DRAG VISUAL SYSTEM ── */
+/* Insert line */
+#gline{position:fixed;z-index:9998;pointer-events:none;border-radius:2px;height:3px;display:none;
+  background:linear-gradient(90deg,transparent,#4f8ef7 8%,#4f8ef7 92%,transparent);
+  box-shadow:0 0 10px rgba(79,142,247,.9),0 0 22px rgba(79,142,247,.45);
+  transition:top .07s,left .07s,width .07s}
+#gline::before,#gline::after{content:'';position:absolute;top:-3px;width:9px;height:9px;border-radius:50%;background:var(--accent);box-shadow:0 0 7px rgba(79,142,247,.85)}
+#gline::before{left:-4px}#gline::after{right:-4px}
+/* Floating clone */
+.drag-clone-act{position:fixed!important;pointer-events:none!important;z-index:9999!important;opacity:.86;
+  transform:rotate(2deg) scale(1.04);
+  box-shadow:0 28px 68px rgba(0,0,0,.85),0 0 0 2px var(--accent)!important;
+  border-radius:var(--r)!important;will-change:left,top}
+/* Placeholder at source */
+.drag-ph-card{border:2px dashed rgba(79,142,247,.32);background:rgba(79,142,247,.04);border-radius:var(--r);animation:ph-blink 1.6s ease infinite;pointer-events:none}
+.drag-ph-sub{border:2px dashed rgba(79,142,247,.28);background:rgba(79,142,247,.03);border-radius:7px;animation:ph-blink 1.6s ease infinite;pointer-events:none;min-height:36px}
+@keyframes ph-blink{0%,100%{border-color:rgba(79,142,247,.2);background:rgba(79,142,247,.02)}50%{border-color:rgba(79,142,247,.5);background:rgba(79,142,247,.07)}}
+/* Gap spread animation */
+.pcard.gap-t{margin-top:24px!important}
+.pcard.gap-b{margin-bottom:24px!important}
+.scard.gap-t-s{margin-top:16px!important}
+.scard.gap-b-s{margin-bottom:16px!important}
 /* ── DRAG HANDLE ── */
 .drag-handle{
   display:none; /* PC では非表示 */
@@ -465,7 +489,7 @@ function renderCard(c){
 
   let moveBtn=done?`<button class="btn bg bsm" onclick="moveToComp('${c.id}')">✅ 完了へ</button>`:'';
 
-  return`<div class="pcard ${dc} ${done?'done-st':''}" id="pcard-${c.id}" data-id="${c.id}" draggable="true">
+  return`<div class="pcard ${dc} ${done?'done-st':''}" id="pcard-${c.id}" data-id="${c.id}">
     <div class="cband ${bandCls(c)}">
       <div class="drag-handle drag-handle-p" data-handle="p" title="ドラッグして移動">⠿</div>
       <div class="ctitle${done?' done':''}">${esc(c.title)}</div>
@@ -492,7 +516,7 @@ function renderSub(pid,s){
   const wInp=isW?`<input type="text" class="wp-inp" placeholder="担当者名" value="${esc(s.waitingPerson||'')}" onchange="updWP('${pid}','${s.id}',this.value)" onclick="event.stopPropagation()">`:'';
   const wL={light:'軽度','1hour':'1h',more:'1h+',waiting:'他者待ち'};
   const dChip=s.dueDate?`<span>📅${fmtD(s.dueDate)}</span>`:'';
-  return`<div class="scard ${dc} ${s.completed?'s-done':''}" id="sc-${s.id}" data-subid="${s.id}" data-pid="${pid}" draggable="true">
+  return`<div class="scard ${dc} ${s.completed?'s-done':''}" id="sc-${s.id}" data-subid="${s.id}" data-pid="${pid}">
     ${dogEar}
     <div class="sbar ${barC}"></div>
     <div class="drag-handle drag-handle-s" data-handle="s" title="ドラッグして移動">⠿</div>
@@ -522,7 +546,7 @@ function renderBoard(){
   if(!cards.length){board.innerHTML='<div class="empty-st">📭<br><br>該当するカードがありません</div>';return}
   const ordered=S.sortedByDue?[...cards].sort((a,b)=>{if(!a.dueDate)return 1;if(!b.dueDate)return-1;return a.dueDate.localeCompare(b.dueDate)}):[...cards].sort((a,b)=>a.order-b.order);
   board.innerHTML=ordered.map(c=>renderCard(c)).join('');
-  initPDrag();initSDrag();
+  initDrag();
 }
 
 function renderDone(){
@@ -674,7 +698,8 @@ function delSub(pid,sid){
 function openAddCard(){
   editCardId=null;editTags=[];curTagColor=TAG_COLORS[0];
   document.getElementById('cmTitle').textContent='📋 カード追加';
-  ['cmCardTitle','cmDue','cmCat','cmMemo'].forEach(id=>document.getElementById(id).value='');
+  ['cmCardTitle','cmCat','cmMemo'].forEach(id=>document.getElementById(id).value='');
+  document.getElementById('cmDue').value=today();
   ['cmUrgent','cmImportant','cmRoutine'].forEach(id=>document.getElementById(id).checked=false);
   document.getElementById('routSec').style.display='none';
   renderTagArea();renderCP();openModal('cardModal');
@@ -754,7 +779,7 @@ function toggleWP(){document.getElementById('wpGrp').style.display=document.getE
 function openInsertSub(pid,idx){
   editSubId=null;editParId=pid;insertIdx=idx;
   document.getElementById('smTitle').textContent='➕ サブタスク追加';
-  document.getElementById('smName').value='';document.getElementById('smDue').value='';
+  document.getElementById('smName').value='';document.getElementById('smDue').value=today();
   document.getElementById('smWork').value='light';document.getElementById('smWP').value='';
   document.getElementById('wpGrp').style.display='none';
   openModal('subModal');
@@ -808,226 +833,221 @@ function pushRoutHist(c,nd){
   S.routHist.push(rec);c.completedHistory.push({completedAt:Date.now(),nextDue:nd});
 }
 
-// ─────────────────────────────────────────────
-// DRAG & DROP — PARENT CARDS
-// ─────────────────────────────────────────────
-let dragId=null,touchDragEl=null,touchClone=null,touchSX,touchSY;
-let ptTimer=null,ptDragActive=false; // ①長押し管理
+// ═══════════════════════════════════════════════
+// UNIFIED DRAG & DROP (Pointer Events + Touch)
+// ═══════════════════════════════════════════════
 
-function initPDrag(){
-  document.querySelectorAll('.pcard').forEach(el=>{
-    el.addEventListener('dragstart',pdStart);el.addEventListener('dragover',pdOver);
-    el.addEventListener('drop',pdDrop);el.addEventListener('dragend',pdEnd);
-    el.addEventListener('touchstart',ptStart,{passive:true});
-    el.addEventListener('touchmove',ptMove,{passive:false});
-    el.addEventListener('touchend',ptEnd);
-    el.addEventListener('touchcancel',ptCancel);
-  });
+/* ── Drag state ── */
+const DG={on:false,pending:false,type:null,id:null,pid:null,el:null,clone:null,ph:null,
+          iEl:null,iBefore:true,ox:0,oy:0,sx:0,sy:0,timer:null};
+let gLine=null,_dgInited=false;
+
+/* ── Init (called after each render) ── */
+function initDrag(){
+  if(!_dgInited){
+    // Create insert-line element
+    gLine=document.createElement('div');gLine.id='gline';document.body.appendChild(gLine);
+    // Global listeners
+    document.addEventListener('pointermove',_dgMove,{passive:false});
+    document.addEventListener('pointerup',_dgUp);
+    document.addEventListener('pointercancel',_dgCancel);
+    // Prevent context menu during drag (long press on iOS)
+    document.addEventListener('contextmenu',e=>{if(DG.el||DG.pending)e.preventDefault()});
+    _dgInited=true;
+  }
+  // Per-card listeners (fresh elements each render)
+  document.querySelectorAll('.pcard').forEach(el=>el.addEventListener('pointerdown',_cardDown));
+  document.querySelectorAll('.scard').forEach(el=>el.addEventListener('pointerdown',_subDown));
 }
 
-function pdStart(e){dragId=e.currentTarget.dataset.id;e.currentTarget.classList.add('dragging');e.dataTransfer.effectAllowed='move'}
-function pdOver(e){e.preventDefault();document.querySelectorAll('.pcard').forEach(c=>c.classList.remove('drag-ov'));if(e.currentTarget.dataset.id!==dragId)e.currentTarget.classList.add('drag-ov')}
-function pdDrop(e){
-  e.preventDefault();const tid=e.currentTarget.dataset.id;
-  if(!dragId||dragId===tid)return;
-  const si=S.cards.findIndex(c=>c.id===dragId),ti=S.cards.findIndex(c=>c.id===tid);
-  if(si<0||ti<0)return;
-  const[sc]=S.cards.splice(si,1);S.cards.splice(ti,0,sc);S.cards.forEach((c,i)=>c.order=i);
-  document.querySelectorAll('.pcard').forEach(c=>c.classList.remove('drag-ov'));render();
-}
-function pdEnd(e){e.currentTarget.classList.remove('dragging');document.querySelectorAll('.pcard').forEach(c=>c.classList.remove('drag-ov'));dragId=null}
-
-function ptStart(e){
-  // 小カード上は親ドラッグを起動しない
-  if(e.target.closest('.scard'))return;
-  const t=e.touches[0];
-  touchSX=t.clientX;touchSY=t.clientY;
-  touchDragEl=e.currentTarget;
-  ptDragActive=false;
-  if(ptTimer){clearTimeout(ptTimer);ptTimer=null}
-
-  if(e.target.closest('.drag-handle[data-handle="p"]')){
-    // ① ハンドルタッチ → 即ドラッグモード
-    ptDragActive=true;
+/* ── Pointerdown — parent card ── */
+function _cardDown(e){
+  if(e.button&&e.button!==0)return;
+  if(e.target.closest('button,.ins-btn,.s-chk,.wp-inp'))return;
+  if(DG.on||DG.pending)return;
+  const isTouch=e.pointerType==='touch';
+  const onHandle=e.target.closest('.drag-handle[data-handle="p"]');
+  DG.el=e.currentTarget;DG.type='p';DG.id=e.currentTarget.dataset.id;DG.pid=null;
+  DG.sx=e.clientX;DG.sy=e.clientY;
+  if(!isTouch||onHandle){
+    e.currentTarget.setPointerCapture(e.pointerId);
+    _dgActivate(e.clientX,e.clientY);
   } else {
-    // ① 長押し1秒でドラッグモード開始
-    ptTimer=setTimeout(()=>{
-      if(!touchDragEl)return;
-      ptDragActive=true;
+    DG.timer=setTimeout(()=>{
+      if(!DG.el||DG.on)return;
+      DG.pending=true;
       navigator.vibrate&&navigator.vibrate(50);
-      touchDragEl.classList.add('lifting');
-      setTimeout(()=>{if(touchDragEl)touchDragEl.classList.remove('lifting')},400);
-    },1000);
+      DG.el.classList.add('lifting');
+    },800);
   }
 }
 
-function ptMove(e){
-  if(!touchDragEl)return;
-  const t=e.touches[0];
-  const dx=Math.abs(t.clientX-touchSX),dy=Math.abs(t.clientY-touchSY);
-
-  // 長押し待機中に指が動いたらキャンセル → スクロール優先
-  if(ptTimer&&(dx>10||dy>10)){
-    clearTimeout(ptTimer);ptTimer=null;
-    touchDragEl.classList.remove('lifting');
-    touchDragEl=null;return;
-  }
-
-  if(!ptDragActive)return; // ドラッグモード未開始 → スクロールに委ねる
-
-  e.preventDefault(); // ドラッグ中のみスクロールをブロック
-  if(!touchClone){
-    touchClone=touchDragEl.cloneNode(true);
-    touchClone.style.cssText=`position:fixed;width:${touchDragEl.offsetWidth}px;opacity:.75;pointer-events:none;z-index:9999;transform:rotate(1.5deg);border-radius:var(--r);box-shadow:var(--shl)`;
-    document.body.appendChild(touchClone);
-    touchDragEl.style.opacity='.25';
-    touchDragEl.classList.remove('lifting');
-    dragId=touchDragEl.dataset.id;
-  }
-  touchClone.style.left=(t.clientX-touchDragEl.offsetWidth/2)+'px';
-  touchClone.style.top=(t.clientY-40)+'px';
-  const over=document.elementFromPoint(t.clientX,t.clientY)?.closest('.pcard');
-  document.querySelectorAll('.pcard').forEach(c=>c.classList.remove('drag-ov'));
-  if(over&&over!==touchDragEl)over.classList.add('drag-ov');
-}
-
-function ptEnd(e){
-  if(ptTimer){clearTimeout(ptTimer);ptTimer=null}
-  if(touchDragEl)touchDragEl.classList.remove('lifting');
-  if(!ptDragActive||!touchClone){
-    touchDragEl=null;ptDragActive=false;return;
-  }
-  const t=e.changedTouches[0];
-  const tgt=document.elementFromPoint(t.clientX,t.clientY)?.closest('.pcard');
-  if(tgt&&tgt.dataset.id&&tgt.dataset.id!==dragId){
-    const si=S.cards.findIndex(c=>c.id===dragId),ti=S.cards.findIndex(c=>c.id===tgt.dataset.id);
-    if(si>=0&&ti>=0){const[sc]=S.cards.splice(si,1);S.cards.splice(ti,0,sc);S.cards.forEach((c,i)=>c.order=i);render()}
-  }
-  touchClone.remove();touchClone=null;
-  if(touchDragEl)touchDragEl.style.opacity='';
-  document.querySelectorAll('.pcard').forEach(c=>c.classList.remove('drag-ov'));
-  dragId=null;touchDragEl=null;ptDragActive=false;
-}
-function ptCancel(e){
-  if(ptTimer){clearTimeout(ptTimer);ptTimer=null}
-  if(touchDragEl)touchDragEl.classList.remove('lifting');
-  if(touchClone){touchClone.remove();touchClone=null}
-  if(touchDragEl)touchDragEl.style.opacity='';
-  document.querySelectorAll('.pcard').forEach(c=>c.classList.remove('drag-ov'));
-  dragId=null;touchDragEl=null;ptDragActive=false;
-}
-
-// ─────────────────────────────────────────────
-// DRAG & DROP — SUB CARDS (mouse + touch)
-// ─────────────────────────────────────────────
-let dragSID=null,dragSPID=null;
-let sTouchEl=null,sTouchClone=null,sTouchSX,sTouchSY,sTouchSID,sTouchSPID;
-let stTimer=null,stDragActive=false; // ①長押し管理
-
-function initSDrag(){
-  document.querySelectorAll('.scard').forEach(el=>{
-    el.addEventListener('dragstart',sdStart);el.addEventListener('dragover',sdOver);
-    el.addEventListener('drop',sdDrop);el.addEventListener('dragend',sdEnd);
-    // ①タッチ対応（長押し＋ハンドル）
-    el.addEventListener('touchstart',stStart,{passive:true});
-    el.addEventListener('touchmove',stMove,{passive:false});
-    el.addEventListener('touchend',stEnd);
-    el.addEventListener('touchcancel',stCancel);
-  });
-}
-function sdStart(e){e.stopPropagation();dragSID=e.currentTarget.dataset.subid;dragSPID=e.currentTarget.dataset.pid;e.currentTarget.classList.add('dragging-s');e.dataTransfer.effectAllowed='move'}
-function sdOver(e){e.preventDefault();e.stopPropagation();if(e.currentTarget.dataset.pid!==dragSPID)return;document.querySelectorAll('.scard').forEach(s=>s.classList.remove('drag-ov-s'));if(e.currentTarget.dataset.subid!==dragSID)e.currentTarget.classList.add('drag-ov-s')}
-function sdDrop(e){
-  e.preventDefault();e.stopPropagation();
-  const tid=e.currentTarget.dataset.subid,tpid=e.currentTarget.dataset.pid;
-  if(!dragSID||dragSID===tid||tpid!==dragSPID)return;
-  const c=S.cards.find(x=>x.id===dragSPID);if(!c)return;
-  const subs=[...c.subCards].sort((a,b)=>a.order-b.order);
-  const si=subs.findIndex(s=>s.id===dragSID),ti=subs.findIndex(s=>s.id===tid);
-  if(si<0||ti<0)return;
-  const[sc]=subs.splice(si,1);subs.splice(ti,0,sc);subs.forEach((s,i)=>s.order=i);c.subCards=subs;
-  document.querySelectorAll('.scard').forEach(s=>s.classList.remove('drag-ov-s'));render();
-}
-function sdEnd(e){e.currentTarget.classList.remove('dragging-s');document.querySelectorAll('.scard').forEach(s=>s.classList.remove('drag-ov-s'));dragSID=null;dragSPID=null}
-
-// ①小カードタッチドラッグ（ハンドル即時 or 長押し1秒）
-function stStart(e){
-  const t=e.touches[0];
-  sTouchSX=t.clientX;sTouchSY=t.clientY;
-  sTouchEl=e.currentTarget;sTouchSID=sTouchEl.dataset.subid;sTouchSPID=sTouchEl.dataset.pid;
-  stDragActive=false;
-  if(stTimer){clearTimeout(stTimer);stTimer=null}
-
-  if(e.target.closest('.drag-handle[data-handle="s"]')){
-    // ハンドルタッチ → 即ドラッグモード
-    stDragActive=true;
+/* ── Pointerdown — sub card ── */
+function _subDown(e){
+  if(e.button&&e.button!==0)return;
+  if(e.target.closest('button,.ins-btn,.s-chk,.wp-inp'))return;
+  if(DG.on||DG.pending)return;
+  e.stopPropagation();
+  const isTouch=e.pointerType==='touch';
+  const onHandle=e.target.closest('.drag-handle[data-handle="s"]');
+  DG.el=e.currentTarget;DG.type='s';
+  DG.id=e.currentTarget.dataset.subid;DG.pid=e.currentTarget.dataset.pid;
+  DG.sx=e.clientX;DG.sy=e.clientY;
+  if(!isTouch||onHandle){
+    e.currentTarget.setPointerCapture(e.pointerId);
+    _dgActivate(e.clientX,e.clientY);
   } else {
-    // 長押し1秒でドラッグモード
-    stTimer=setTimeout(()=>{
-      if(!sTouchEl)return;
-      stDragActive=true;
+    DG.timer=setTimeout(()=>{
+      if(!DG.el||DG.on)return;
+      DG.pending=true;
       navigator.vibrate&&navigator.vibrate(50);
-      sTouchEl.classList.add('lifting-s');
-      setTimeout(()=>{if(sTouchEl)sTouchEl.classList.remove('lifting-s')},400);
-    },1000);
+      DG.el.classList.add('lifting-s');
+    },800);
   }
 }
-function stMove(e){
-  if(!sTouchEl)return;
-  const t=e.touches[0];
-  const dx=Math.abs(t.clientX-sTouchSX),dy=Math.abs(t.clientY-sTouchSY);
 
-  // 長押し待機中に指が動いたらキャンセル → スクロール優先
-  if(stTimer&&(dx>10||dy>10)){
-    clearTimeout(stTimer);stTimer=null;
-    if(sTouchEl)sTouchEl.classList.remove('lifting-s');
-    sTouchEl=null;return;
-  }
-
-  if(!stDragActive)return; // ドラッグモード未開始 → スクロールに委ねる
-
-  e.preventDefault();e.stopPropagation();
-  // 親カードのタッチドラッグを無効化
-  touchDragEl=null;if(touchClone){touchClone.remove();touchClone=null}
-
-  if(!sTouchClone){
-    sTouchClone=sTouchEl.cloneNode(true);
-    sTouchClone.style.cssText=`position:fixed;width:${sTouchEl.offsetWidth}px;opacity:.78;pointer-events:none;z-index:9999;transform:rotate(1deg);border-radius:7px;box-shadow:var(--shl)`;
-    document.body.appendChild(sTouchClone);
-    sTouchEl.style.opacity='.25';
-    sTouchEl.classList.remove('lifting-s');
-  }
-  sTouchClone.style.left=(t.clientX-sTouchEl.offsetWidth/2)+'px';
-  sTouchClone.style.top=(t.clientY-24)+'px';
-  const over=document.elementFromPoint(t.clientX,t.clientY)?.closest('.scard');
-  document.querySelectorAll('.scard').forEach(s=>s.classList.remove('drag-ov-s'));
-  if(over&&over!==sTouchEl&&over.dataset.pid===sTouchSPID)over.classList.add('drag-ov-s');
+/* ── Activate drag visuals ── */
+function _dgActivate(x,y){
+  DG.on=true;DG.pending=false;
+  if(DG.timer){clearTimeout(DG.timer);DG.timer=null;}
+  DG.el.classList.remove('lifting','lifting-s');
+  // Placeholder (maintains layout space)
+  const ph=document.createElement('div');
+  ph.className=DG.type==='p'?'drag-ph-card':'drag-ph-sub';
+  ph.style.height=DG.el.offsetHeight+'px';
+  DG.el.before(ph);DG.el.style.visibility='hidden';DG.ph=ph;
+  // Floating clone
+  const clone=DG.el.cloneNode(true);
+  clone.removeAttribute('id');clone.classList.add('drag-clone-act');
+  clone.style.width=DG.el.offsetWidth+'px';
+  document.body.appendChild(clone);DG.clone=clone;
+  const r=DG.el.getBoundingClientRect();
+  DG.ox=x-r.left;DG.oy=y-r.top;
+  _mvClone(x,y);
 }
-function stEnd(e){
-  if(stTimer){clearTimeout(stTimer);stTimer=null}
-  if(sTouchEl)sTouchEl.classList.remove('lifting-s');
-  if(!stDragActive||!sTouchClone){sTouchEl=null;stDragActive=false;return}
-  const t=e.changedTouches[0];
-  const tgt=document.elementFromPoint(t.clientX,t.clientY)?.closest('.scard');
-  if(tgt&&tgt.dataset.subid&&tgt.dataset.subid!==sTouchSID&&tgt.dataset.pid===sTouchSPID){
-    const c=S.cards.find(x=>x.id===sTouchSPID);
-    if(c){
-      const subs=[...c.subCards].sort((a,b)=>a.order-b.order);
-      const si=subs.findIndex(s=>s.id===sTouchSID),ti=subs.findIndex(s=>s.id===tgt.dataset.subid);
-      if(si>=0&&ti>=0){const[sc]=subs.splice(si,1);subs.splice(ti,0,sc);subs.forEach((s,i)=>s.order=i);c.subCards=subs;render()}
+function _mvClone(x,y){if(DG.clone){DG.clone.style.left=(x-DG.ox)+'px';DG.clone.style.top=(y-DG.oy)+'px'}}
+
+/* ── Pointermove (document) ── */
+function _dgMove(e){
+  if(!DG.el&&!DG.pending&&!DG.on)return;
+  const dx=Math.abs(e.clientX-DG.sx),dy=Math.abs(e.clientY-DG.sy);
+  // Pending long press → activate on first move
+  if(DG.pending&&!DG.on){
+    try{DG.el.setPointerCapture(e.pointerId)}catch(_){}
+    _dgActivate(e.clientX,e.clientY);return;
+  }
+  // Cancel long press if finger scrolls
+  if(DG.timer&&(dx>10||dy>10)){
+    clearTimeout(DG.timer);DG.timer=null;
+    if(DG.el)DG.el.classList.remove('lifting','lifting-s');
+    DG.el=null;return;
+  }
+  if(!DG.on)return;
+  e.preventDefault();
+  _mvClone(e.clientX,e.clientY);
+  if(DG.type==='p')_updPI(e.clientX,e.clientY);
+  else _updSI(e.clientX,e.clientY);
+}
+
+/* ── Pointerup ── */
+function _dgUp(e){
+  if(DG.timer){clearTimeout(DG.timer);DG.timer=null;}
+  if(DG.el)DG.el.classList.remove('lifting','lifting-s');
+  if(DG.pending){DG.pending=false;_dgClean();return;}
+  if(!DG.on){DG.el=null;return;}
+  if(DG.type==='p')_dropP();else _dropS();
+  _dgClean();
+}
+function _dgCancel(){
+  if(DG.timer){clearTimeout(DG.timer);DG.timer=null;}
+  if(DG.el)DG.el.classList.remove('lifting','lifting-s');
+  _dgClean();
+}
+
+/* ── Insert point detection — parent cards ── */
+function _updPI(x,y){
+  document.querySelectorAll('.pcard').forEach(c=>c.classList.remove('gap-t','gap-b','drag-ov'));
+  if(gLine)gLine.style.display='none';
+  DG.iEl=null;
+  const cards=[...document.querySelectorAll('.pcard')].filter(c=>c.style.visibility!=='hidden');
+  for(const c of cards){
+    const r=c.getBoundingClientRect();
+    if(y>=r.top-14&&y<=r.bottom+14&&x>=r.left-10&&x<=r.right+10){
+      DG.iEl=c;DG.iBefore=y<=(r.top+r.height*.5);
+      c.classList.add(DG.iBefore?'gap-t':'gap-b');
+      c.classList.add('drag-ov');
+      _showLine(r.left,DG.iBefore?r.top-2:r.bottom+2,r.width);
+      break;
     }
   }
-  sTouchClone.remove();sTouchClone=null;
-  if(sTouchEl)sTouchEl.style.opacity='';
-  document.querySelectorAll('.scard').forEach(s=>s.classList.remove('drag-ov-s'));
-  sTouchEl=null;sTouchSID=null;sTouchSPID=null;stDragActive=false;
 }
-function stCancel(e){
-  if(stTimer){clearTimeout(stTimer);stTimer=null}
-  if(sTouchEl){sTouchEl.classList.remove('lifting-s');sTouchEl.style.opacity=''}
-  if(sTouchClone){sTouchClone.remove();sTouchClone=null}
-  document.querySelectorAll('.scard').forEach(s=>s.classList.remove('drag-ov-s'));
-  sTouchEl=null;sTouchSID=null;sTouchSPID=null;stDragActive=false;
+
+/* ── Insert point detection — sub cards ── */
+function _updSI(x,y){
+  const pid=DG.pid;
+  document.querySelectorAll(`.scard[data-pid="${pid}"]`).forEach(s=>s.classList.remove('gap-t-s','gap-b-s','drag-ov-s'));
+  if(gLine)gLine.style.display='none';
+  DG.iEl=null;
+  const subs=[...document.querySelectorAll(`.scard[data-pid="${pid}"]`)].filter(s=>s.style.visibility!=='hidden');
+  for(const s of subs){
+    const r=s.getBoundingClientRect();
+    if(y>=r.top-7&&y<=r.bottom+7){
+      DG.iEl=s;DG.iBefore=y<=(r.top+r.height*.5);
+      s.classList.add(DG.iBefore?'gap-t-s':'gap-b-s');
+      s.classList.add('drag-ov-s');
+      _showLine(r.left,DG.iBefore?r.top-2:r.bottom+2,r.width);
+      break;
+    }
+  }
+}
+
+/* ── Insert line show/hide ── */
+function _showLine(x,y,w){
+  if(!gLine)return;
+  gLine.style.left=x+'px';gLine.style.top=y+'px';gLine.style.width=w+'px';gLine.style.display='block';
+}
+
+/* ── Drop — parent cards ── */
+function _dropP(){
+  if(!DG.iEl)return;
+  const tid=DG.iEl.dataset.id,sid=DG.id;
+  if(tid===sid)return;
+  const si=S.cards.findIndex(c=>c.id===sid),ti=S.cards.findIndex(c=>c.id===tid);
+  if(si<0||ti<0)return;
+  const[sc]=S.cards.splice(si,1);
+  const nti=S.cards.findIndex(c=>c.id===tid);
+  // top-half(iBefore=true)→insert before target; bottom-half→insert after
+  S.cards.splice(DG.iBefore?nti:nti+1,0,sc);
+  S.cards.forEach((c,i)=>c.order=i);
+  render();
+}
+
+/* ── Drop — sub cards (column-reverse container) ── */
+function _dropS(){
+  if(!DG.iEl)return;
+  const tsid=DG.iEl.dataset.subid,ssid=DG.id,pid=DG.pid;
+  if(tsid===ssid)return;
+  const card=S.cards.find(c=>c.id===pid);if(!card)return;
+  const subs=[...card.subCards].sort((a,b)=>a.order-b.order);
+  const si=subs.findIndex(s=>s.id===ssid),ti=subs.findIndex(s=>s.id===tsid);
+  if(si<0||ti<0)return;
+  const[sc]=subs.splice(si,1);
+  const nti=subs.findIndex(s=>s.id===tsid);
+  // column-reverse: top-half visually = higher order = insert AFTER in ascending array
+  subs.splice(DG.iBefore?nti+1:nti,0,sc);
+  subs.forEach((s,i)=>s.order=i);card.subCards=subs;
+  render();
+}
+
+/* ── Cleanup ── */
+function _dgClean(){
+  if(DG.clone){DG.clone.remove();DG.clone=null;}
+  if(DG.ph){DG.ph.remove();DG.ph=null;}
+  if(DG.el){DG.el.style.visibility='';DG.el=null;}
+  if(gLine)gLine.style.display='none';
+  document.querySelectorAll('.gap-t,.gap-b,.gap-t-s,.gap-b-s,.drag-ov,.drag-ov-s')
+    .forEach(x=>x.classList.remove('gap-t','gap-b','gap-t-s','gap-b-s','drag-ov','drag-ov-s'));
+  Object.assign(DG,{on:false,pending:false,type:null,id:null,pid:null,el:null,clone:null,ph:null,iEl:null,timer:null});
 }
 
 // ─────────────────────────────────────────────
