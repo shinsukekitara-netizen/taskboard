@@ -311,7 +311,6 @@ body{font-family:'Noto Sans JP',sans-serif;background:var(--bg);color:var(--text
   <span class="sync-msg" id="syncMsg">初期化中…</span>
   <span class="sync-id" id="syncId"></span>
   <button class="sync-retry" id="syncRetryBtn" style="display:none" onclick="cloudLoad(true)">↺ 再試行</button>
-  <button class="sync-reset" id="syncResetBtn" style="display:none" onclick="resetBinId()">🔗 BIN再設定</button>
 </div>
 
 <div class="fbar">
@@ -444,13 +443,13 @@ function gid(){return Date.now().toString(36)+Math.random().toString(36).slice(2
 // ─────────────────────────────────────────────
 const JBKEY='$2a$10$Wl2JnLVl9bRo.H58Efb22.MjgvquQR.8XhUKvOUBh42NE6eiTDR7S';
 const JBBASE='https://api.jsonbin.io/v3/b';
-const LS_BIN='tb3_binId';
+const BIN_ID='69f96d08aaba882197712a9b'; // 固定BIN ID
 const LS_DIRTY='tb3_dirty';
 const LS_CACHE='tb3_cache';
 
-let _saveTimer=null;   // debounce handle
-let _saving=false;     // prevent overlapping saves
-let _binId=localStorage.getItem(LS_BIN)||null;
+let _saveTimer=null;
+let _saving=false;
+let _binId=BIN_ID; // 常に固定
 let _online=navigator.onLine;
 
 /* ── Sync status UI ── */
@@ -462,17 +461,14 @@ function setSyncUI(state,msg,showRetry=false,showReset=false){
   const reset=document.getElementById('syncResetBtn');
   dot.className='sync-dot '+state;
   msgEl.textContent=msg;
-  idEl.textContent=_binId?'BIN: '+_binId.slice(-8):'';
+  idEl.textContent='BIN: '+BIN_ID.slice(-8);
   retry.style.display=showRetry?'':'none';
-  reset.style.display=showReset?'':'none';
+  reset.style.display='none'; // BIN固定なので不要
 }
 
 /* ── LocalStorage cache (fallback + debounce buffer) ── */
 function lsSave(){
-  try{
-    localStorage.setItem(LS_CACHE,JSON.stringify(S));
-    localStorage.setItem(LS_BIN,_binId||'');
-  }catch(e){}
+  try{localStorage.setItem(LS_CACHE,JSON.stringify(S))}catch(e){}
 }
 function lsLoad(){
   try{
@@ -491,24 +487,7 @@ function applyData(d){
   S.sortedByDue=!!d.sortedByDue;
 }
 
-/* ── Create new BIN ── */
-async function createBin(){
-  setSyncUI('saving','BINを作成中…');
-  const res=await fetch(JBBASE,{
-    method:'POST',
-    headers:{'Content-Type':'application/json','X-Master-Key':JBKEY,'X-Bin-Name':'TaskBoard','X-Bin-Private':'true'},
-    body:JSON.stringify(S)
-  });
-  if(!res.ok)throw new Error('BIN作成失敗 '+res.status);
-  const j=await res.json();
-  _binId=j.metadata.id;
-  localStorage.setItem(LS_BIN,_binId);
-  lsSave();
-  setSyncUI('ok','クラウド保存済み ✓');
-  toast('☁️ 新しいBINを作成しました（ID: '+_binId.slice(-8)+'）');
-}
-
-/* ── Save to BIN (debounced) ── */
+/* ── Sync dirty data on reconnect ── */
 function save(){
   lsSave(); // immediately write to LS
   localStorage.setItem(LS_DIRTY,'1');
@@ -519,11 +498,10 @@ function save(){
 
 async function cloudSave(){
   if(_saving)return;
-  if(!_binId){await cloudLoad(false);return}
   _saving=true;
   setSyncUI('saving','保存中…');
   try{
-    const res=await fetch(`${JBBASE}/${_binId}`,{
+    const res=await fetch(`${JBBASE}/${BIN_ID}`,{
       method:'PUT',
       headers:{'Content-Type':'application/json','X-Master-Key':JBKEY},
       body:JSON.stringify(S)
@@ -545,49 +523,25 @@ async function cloudLoad(isManual=false){
     if(!S.cards.length&&!S.done.length)addSample();
     render();return;
   }
-  if(!_binId){
-    // No BIN yet — try LS cache first, then create
-    lsLoad();
-    if(!S.cards.length&&!S.done.length)addSample();
-    render();
-    setSyncUI('saving','BINを初期化中…');
-    try{await createBin()}
-    catch(e){setSyncUI('err','BIN作成失敗: '+e.message,true,false)}
-    return;
-  }
   setSyncUI('saving','データを読込中…');
   try{
-    const res=await fetch(`${JBBASE}/${_binId}/latest`,{
+    const res=await fetch(`${JBBASE}/${BIN_ID}/latest`,{
       headers:{'X-Master-Key':JBKEY,'X-Bin-Meta':'false'}
     });
-    if(res.status===404){
-      // BIN not found — create new
-      _binId=null;localStorage.removeItem(LS_BIN);
-      await cloudLoad(false);return;
-    }
-    if(!res.ok)throw new Error(res.status);
+    if(!res.ok)throw new Error('HTTP '+res.status);
     const d=await res.json();
-    // d is the raw record (X-Bin-Meta:false returns the body directly)
     applyData(d.record||d);
     lsSave();localStorage.removeItem(LS_DIRTY);
     if(!S.cards.length&&!S.done.length)addSample();
     render();
     setSyncUI('ok','読込完了 ✓'+(isManual?' （手動更新）':''));
   }catch(e){
-    // Fall back to LS cache
     lsLoad();
     if(!S.cards.length&&!S.done.length)addSample();
     render();
-    setSyncUI('err','読込失敗: '+e.message,true,true);
+    setSyncUI('err','読込失敗: '+e.message,true);
     toast('⚠️ クラウド読込失敗。キャッシュを使用します');
   }
-}
-
-/* ── Sync dirty data on reconnect ── */
-function resetBinId(){
-  if(!confirm('BIN IDをリセットして新しいBINを作成しますか？\n現在のデータはそのまま新しいBINに保存されます。'))return;
-  _binId=null;localStorage.removeItem(LS_BIN);
-  createBin().then(()=>setSyncUI('ok','新しいBINで保存済み ✓'));
 }
 
 /* ── Online / offline events ── */
