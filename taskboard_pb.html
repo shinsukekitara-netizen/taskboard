@@ -175,6 +175,12 @@ body{font-family:'Noto Sans JP',sans-serif;background:var(--bg);color:var(--text
 .tiw{display:flex;flex-wrap:wrap;gap:5px;padding:7px;background:#fff;border:1px solid var(--border);border-radius:var(--rs);min-height:42px;align-items:center;cursor:text}
 .tiw:focus-within{border-color:var(--accent)}
 .tiw input{flex:1;min-width:90px;background:transparent;border:none;color:var(--text);font-family:'Noto Sans JP',sans-serif;font-size:.85rem;outline:none}
+/* ── TAG ADD BUTTON ── */
+.tag-add-row{display:flex;gap:6px;align-items:stretch;margin-top:6px}
+.tag-add-row .tiw{flex:1;margin-top:0}
+.tag-add-btn{min-height:44px;padding:0 16px;background:var(--accent);color:#fff;border:none;border-radius:var(--rs);font-family:'Noto Sans JP',sans-serif;font-size:.85rem;font-weight:600;cursor:pointer;white-space:nowrap;flex-shrink:0;transition:background .15s,box-shadow .15s;box-shadow:0 2px 8px rgba(26,86,219,.25)}
+.tag-add-btn:hover{background:#1d4ed8;box-shadow:0 4px 14px rgba(26,86,219,.4)}
+.tag-add-btn:active{transform:scale(.97)}
 .tchip{display:inline-flex;align-items:center;gap:3px;padding:2px 7px;border-radius:10px;font-size:.75rem;font-weight:600}
 .trm{width:13px;height:13px;display:flex;align-items:center;justify-content:center;border-radius:50%;background:rgba(255,255,255,.25);font-size:9px;cursor:pointer;line-height:1}
 .trm:hover{background:rgba(255,255,255,.4)}
@@ -374,8 +380,11 @@ body{font-family:'Noto Sans JP',sans-serif;background:var(--bg);color:var(--text
     </div>
   </div>
   <div class="fg">
-    <label class="flbl">タグ（Enterで追加）<span style="font-weight:400;color:var(--text3)"> ← 追加後に色を選択</span></label>
-    <div class="tiw" id="tiw" onclick="document.getElementById('tagIn').focus()"><input type="text" id="tagIn" placeholder="タグ名を入力..."></div>
+    <label class="flbl">タグ（Enterまたは「追加」ボタンで確定）<span style="font-weight:400;color:var(--text3)"> ← 追加後に色を選択</span></label>
+    <div class="tag-add-row">
+      <div class="tiw" id="tiw" onclick="document.getElementById('tagIn').focus()"><input type="text" id="tagIn" placeholder="タグ名を入力..."></div>
+      <button type="button" class="tag-add-btn" onclick="addTagFromInput()">追加</button>
+    </div>
     <div class="cprow" id="cprow"></div>
   </div>
   <div class="fg"><label class="flbl">メモ</label><textarea class="fta" id="cmMemo" placeholder="メモを入力..."></textarea></div>
@@ -992,10 +1001,22 @@ function saveCard(){
 document.addEventListener('keydown',e=>{
   if(e.target.id==='tagIn'&&(e.key==='Enter'||e.key===',')){
     e.preventDefault();
-    const val=document.getElementById('tagIn').value.trim();
-    if(val&&!editTags.includes(val)){if(!S.tagColors[val])S.tagColors[val]=curTagColor;editTags.push(val);document.getElementById('tagIn').value='';renderTagArea()}
+    addTagFromInput();
   }
 });
+
+function addTagFromInput(){
+  const input=document.getElementById('tagIn');
+  if(!input)return;
+  const val=input.value.trim();
+  if(val&&!editTags.includes(val)){
+    if(!S.tagColors[val])S.tagColors[val]=curTagColor;
+    editTags.push(val);
+  }
+  input.value='';
+  renderTagArea();
+  setTimeout(()=>{const el=document.getElementById('tagIn');if(el)el.focus()},0);
+}
 
 function renderTagArea(){
   const w=document.getElementById('tiw');
