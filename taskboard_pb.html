@@ -453,13 +453,13 @@ function gid(){return Date.now().toString(36)+Math.random().toString(36).slice(2
 // ─────────────────────────────────────────────
 const JBKEY='$2a$10$Wl2JnLVl9bRo.H58Efb22.MjgvquQR.8XhUKvOUBh42NE6eiTDR7S';
 const JBBASE='https://api.jsonbin.io/v3/b';
-const LS_BIN_PB='tb3pb_binId';   // PB用BIN IDをLocalStorageで管理
 const LS_DIRTY='tb3pb_dirty';    // PB専用キー（仕事用と分離）
 const LS_CACHE='tb3pb_cache';    // PB専用キー
+const BIN_ID='69facd8e856a682189b0557a'; // PB用固定BIN ID
 
 let _saveTimer=null;
 let _saving=false;
-let _binId=localStorage.getItem(LS_BIN_PB)||null; // 初回はnull→自動作成
+let _binId=BIN_ID; // 常に固定
 let _online=navigator.onLine;
 
 /* ── Sync status UI ── */
@@ -470,13 +470,13 @@ function setSyncUI(state,msg,showRetry=false){
   const retry=document.getElementById('syncRetryBtn');
   if(dot)dot.className='sync-dot '+state;
   if(msgEl)msgEl.textContent=msg;
-  if(idEl)idEl.textContent=_binId?'BIN: '+_binId.slice(-8):'';
+  if(idEl)idEl.textContent='BIN: '+BIN_ID.slice(-8);
   if(retry)retry.style.display=showRetry?'':'none';
 }
 
 /* ── LocalStorage cache (fallback + debounce buffer) ── */
 function lsSave(){
-  try{localStorage.setItem(LS_CACHE,JSON.stringify(S));if(_binId)localStorage.setItem(LS_BIN_PB,_binId);}catch(e){}
+  try{localStorage.setItem(LS_CACHE,JSON.stringify(S));}catch(e){}
 }
 function lsLoad(){
   try{
@@ -523,23 +523,6 @@ async function cloudSave(){
   }finally{_saving=false}
 }
 
-/* ── Create new BIN (PB初回起動時) ── */
-async function createPBBin(){
-  setSyncUI('saving','PB用BINを作成中…');
-  const res=await fetch(JBBASE,{
-    method:'POST',
-    headers:{'Content-Type':'application/json','X-Master-Key':JBKEY,'X-Bin-Name':'TaskBoard-PB','X-Bin-Private':'true'},
-    body:JSON.stringify(S)
-  });
-  if(!res.ok)throw new Error('BIN作成失敗 '+res.status);
-  const j=await res.json();
-  _binId=j.metadata.id;
-  localStorage.setItem(LS_BIN_PB,_binId);
-  lsSave();
-  setSyncUI('ok','PB BIN作成完了 ✓');
-  toast('🔵 PB用BINを作成しました（ID末尾: '+_binId.slice(-8)+'）');
-}
-
 /* ── Load from BIN ── */
 async function cloudLoad(isManual=false){
   if(!_online){
@@ -548,25 +531,11 @@ async function cloudLoad(isManual=false){
     if(!S.cards.length&&!S.done.length)addSample();
     render();return;
   }
-  // BIN未作成 → サンプル表示してからBIN自動作成
-  if(!_binId){
-    lsLoad();
-    if(!S.cards.length&&!S.done.length)addSample();
-    render();
-    try{await createPBBin()}
-    catch(e){setSyncUI('err','BIN作成失敗: '+e.message,true);}
-    return;
-  }
   setSyncUI('saving','データを読込中…');
   try{
-    const res=await fetch(`${JBBASE}/${_binId}/latest`,{
+    const res=await fetch(`${JBBASE}/${BIN_ID}/latest`,{
       headers:{'X-Master-Key':JBKEY}
     });
-    if(res.status===404){
-      // BINが消えた → 再作成
-      _binId=null;localStorage.removeItem(LS_BIN_PB);
-      await cloudLoad(false);return;
-    }
     if(!res.ok)throw new Error('HTTP '+res.status);
     const json=await res.json();
     const data=json.record||json;
