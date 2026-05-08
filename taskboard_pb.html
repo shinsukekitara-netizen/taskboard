@@ -65,7 +65,7 @@ body{font-family:'Noto Sans JP',sans-serif;background:var(--bg);color:var(--text
 .pcard.drag-ov{border-color:var(--accent)!important;box-shadow:0 0 0 3px rgba(26,86,219,.25)}
 .pcard.due-today{border-color:#ef4444!important;box-shadow:0 0 16px rgba(239,68,68,.3)}
 .pcard.due-tmr{border-color:#f59e0b!important;box-shadow:0 0 12px rgba(245,158,11,.25)}
-.pcard.due-past{border-color:rgba(220,220,255,.2)!important}
+.pcard.due-past{border-color:#ffffff!important;box-shadow:0 0 10px rgba(255,255,255,.3)}
 .pcard.done-st .cbody{opacity:.5}
 
 /* ── CARD BAND ── */
@@ -102,7 +102,7 @@ body{font-family:'Noto Sans JP',sans-serif;background:var(--bg);color:var(--text
 .tags-r{display:flex;flex-wrap:wrap;gap:3px;margin-bottom:7px}
 .tpill{font-size:.68rem;padding:2px 7px;border-radius:10px;font-weight:600}
 .due-ch{font-size:.72rem;color:var(--text2);margin-bottom:7px;display:flex;align-items:center;gap:4px}
-.memo-t{font-size:.76rem;color:var(--text);margin-bottom:8px;padding:5px 8px;background:rgba(26,86,219,.05);border-radius:5px;line-height:1.5;border-left:3px solid var(--accent)}
+.memo-t{font-size:.76rem;color:var(--text);margin-bottom:8px;padding:5px 8px;background:rgba(26,86,219,.05);border-radius:5px;line-height:1.5;border-left:3px solid var(--accent);word-break:break-word;overflow-wrap:break-word;white-space:pre-wrap;max-width:100%;overflow:hidden}
 
 /* ── CARD ACTIONS ── */
 .cacts{display:flex;gap:5px;justify-content:flex-end;margin-top:8px;padding-top:8px;border-top:1px solid rgba(26,86,219,.1)}
@@ -122,7 +122,7 @@ body{font-family:'Noto Sans JP',sans-serif;background:var(--bg);color:var(--text
 .scard.drag-ov-s{border-color:var(--accent)!important;background:#ddeeff!important}
 .scard.due-today{border-color:rgba(239,68,68,.55)!important}
 .scard.due-tmr{border-color:rgba(245,158,11,.55)!important}
-.scard.due-past{border-color:rgba(200,210,255,.18)!important}
+.scard.due-past{border-color:rgba(255,255,255,.7)!important}
 .scard.s-done{background:rgba(26,86,219,.03)!important;border-color:transparent!important}
 .scard.s-done .s-title{color:var(--text3);text-decoration:line-through;opacity:.6}
 .scard.s-done .s-meta{color:var(--text3)}
@@ -203,6 +203,14 @@ body{font-family:'Noto Sans JP',sans-serif;background:var(--bg);color:var(--text
 .empty-st{text-align:center;padding:44px 20px;color:var(--text2);grid-column:1/-1;font-size:.9rem}
 .drag-ph{border:2px dashed var(--border2);border-radius:var(--r);background:rgba(79,142,247,.04);min-height:120px}
 
+/* ── CARD URLS ── */
+.card-urls{display:flex;flex-direction:column;gap:4px;margin-bottom:8px}
+.card-url{font-size:.75rem;color:var(--accent);text-decoration:none;display:flex;align-items:center;gap:4px;padding:3px 7px;background:rgba(26,86,219,.07);border-radius:4px;border:1px solid rgba(26,86,219,.18);word-break:break-all;overflow-wrap:break-word;transition:background .15s}
+.card-url:hover{background:rgba(26,86,219,.14)}
+.url-row{display:flex;gap:6px;margin-bottom:6px;align-items:center}
+.url-row .fi{flex:1}
+/* ── SUB ROUTINE BADGE ── */
+.srout-badge{display:inline-flex;align-items:center;gap:3px;font-size:.65rem;padding:1px 5px;border-radius:8px;background:rgba(26,86,219,.12);color:var(--accent);border:1px solid rgba(26,86,219,.25);flex-shrink:0}
 /* ── DRAG VISUAL SYSTEM ── */
 /* Insert line */
 #gline{position:fixed;z-index:9998;pointer-events:none;border-radius:2px;height:3px;display:none;
@@ -389,6 +397,11 @@ body{font-family:'Noto Sans JP',sans-serif;background:var(--bg);color:var(--text
   </div>
   <div class="fg"><label class="flbl">メモ</label><textarea class="fta" id="cmMemo" placeholder="メモを入力..."></textarea></div>
   <div class="fg">
+    <label class="flbl">参考URL（最大5件）</label>
+    <div id="urlList"></div>
+    <button type="button" class="btn bg bsm" id="addUrlBtn" onclick="addUrlField()" style="margin-top:4px">＋ URL追加</button>
+  </div>
+  <div class="fg">
     <label class="fck"><input type="checkbox" id="cmRoutine" onchange="toggleRS()"> 🔄 ルーチンタスク</label>
   </div>
   <div class="rout-sec" id="routSec" style="display:none">
@@ -425,6 +438,18 @@ body{font-family:'Noto Sans JP',sans-serif;background:var(--bg);color:var(--text
     </div>
   </div>
   <div class="fg" id="wpGrp" style="display:none"><label class="flbl">担当者名</label><input type="text" class="fi" id="smWP" placeholder="待ち相手の名前"></div>
+  <div class="fg">
+    <label class="fck"><input type="checkbox" id="smRoutine" onchange="toggleSubRS()"> 🔄 ルーチン（繰り返し）</label>
+  </div>
+  <div class="rout-sec" id="subRoutSec" style="display:none">
+    <div class="fg" style="margin-bottom:8px">
+      <label class="flbl">繰り返し</label>
+      <select class="fsel2" id="smRType" onchange="updateSubRO()">
+        <option value="daily">毎日</option><option value="weekly">毎週</option><option value="monthly">毎月</option>
+      </select>
+    </div>
+    <div id="subRoutOpts"></div>
+  </div>
   <div class="mfoot">
     <button class="btn bg" onclick="closeModal('subModal')">キャンセル</button>
     <button class="btn bp" onclick="saveSubCard()">保存</button>
@@ -446,6 +471,20 @@ body{font-family:'Noto Sans JP',sans-serif;background:var(--bg);color:var(--text
 </div>
 </div>
 
+<!-- ===== SUB ROUTINE MODAL ===== -->
+<div class="mover" id="subRoutModal">
+<div class="modal">
+  <h2>🔄 サブタスク ルーチン完了</h2>
+  <p style="font-size:.84rem;color:var(--text2);margin-bottom:14px">「<span id="subRcTitle" style="color:var(--text);font-weight:600"></span>」が完了しました。<br>次回の期日を確認・調整してください。</p>
+  <div class="fg"><label class="flbl">次回期日（自動計算）</label><input type="date" class="fi" id="subNextDue"></div>
+  <div class="mfoot">
+    <button class="btn bg" onclick="cancelSubRout()">キャンセル</button>
+    <button class="btn bg" onclick="saveSubRoutNoAdj()">調整なし</button>
+    <button class="btn bp" onclick="saveSubRout()">この日程で更新</button>
+  </div>
+</div>
+</div>
+
 <script>
 // ─────────────────────────────────────────────
 // STATE
@@ -453,7 +492,8 @@ body{font-family:'Noto Sans JP',sans-serif;background:var(--bg);color:var(--text
 let S = {cards:[],done:[],tagColors:{},routHist:[],sortedByDue:false};
 
 const TAG_COLORS=['#ef4444','#f97316','#eab308','#22c55e','#06b6d4','#3b82f6','#8b5cf6','#ec4899','#14b8a6','#f43f5e','#84cc16','#9ca3af'];
-let curTagColor=TAG_COLORS[0],editTags=[],editCardId=null,editSubId=null,editParId=null,insertIdx=null,routCardId=null;
+let curTagColor=TAG_COLORS[0],editTags=[],editUrls=[],editCardId=null,editSubId=null,editParId=null,insertIdx=null,routCardId=null;
+let routSubPid=null,routSubSid=null; // ⑤サブルーチン用
 let filteredCards=null;
 
 function gid(){return Date.now().toString(36)+Math.random().toString(36).slice(2,9)}
@@ -468,6 +508,7 @@ const BIN_ID='69facd8e856a682189b0557a'; // PB用固定BIN ID
 
 let _saveTimer=null;
 let _saving=false;
+let _isLoading=false; // ①読込中はsaveをブロック
 let _binId=BIN_ID; // 常に固定
 let _online=navigator.onLine;
 
@@ -506,7 +547,8 @@ function applyData(d){
 
 /* ── Sync dirty data on reconnect ── */
 function save(){
-  lsSave(); // immediately write to LS
+  if(_isLoading)return; // ①読込中は保存しない
+  lsSave();
   localStorage.setItem(LS_DIRTY,'1');
   if(!_online){setSyncUI('off','オフライン（ローカル保存済み）');return}
   clearTimeout(_saveTimer);
@@ -534,10 +576,11 @@ async function cloudSave(){
 
 /* ── Load from BIN ── */
 async function cloudLoad(isManual=false){
+  _isLoading=true; // ①読込開始 — 保存をブロック
   if(!_online){
     lsLoad();
+    _isLoading=false;
     setSyncUI('off','オフライン（キャッシュから読込）');
-    if(!S.cards.length&&!S.done.length)addSample();
     render();return;
   }
   setSyncUI('saving','データを読込中…');
@@ -548,17 +591,20 @@ async function cloudLoad(isManual=false){
     if(!res.ok)throw new Error('HTTP '+res.status);
     const json=await res.json();
     const data=json.record||json;
-    if(data&&(Array.isArray(data.cards)||Array.isArray(data.done))){
+    // BINのデータを最優先で使用（空でもそのまま適用）
+    if(data&&typeof data==='object'){
       applyData(data);
       lsSave();localStorage.removeItem(LS_DIRTY);
     }
-    if(!S.cards.length&&!S.done.length)addSample();
+    pruneHistory(); // ⑥当月外の履歴を削除
+    _isLoading=false; // ①読込完了 — 保存を解放
     render();
     setSyncUI('ok','読込完了 ✓'+(isManual?' （手動更新）':''));
   }catch(e){
     console.error('cloudLoad error:',e);
     lsLoad();
-    if(!S.cards.length&&!S.done.length)addSample();
+    pruneHistory();
+    _isLoading=false;
     render();
     setSyncUI('err','読込失敗: '+e.message,true);
     toast('⚠️ クラウド読込失敗。キャッシュを使用します');
@@ -589,8 +635,8 @@ function load(){
     }catch(e){}
   }
 }
-function nc(c){return{id:c.id||gid(),title:c.title||'',dueDate:c.dueDate||'',category:c.category||'',urgent:!!c.urgent,important:!!c.important,tags:c.tags||[],memo:c.memo||'',isRoutine:!!c.isRoutine,routineType:c.routineType||'daily',routineDay:c.routineDay??1,order:c.order??0,completed:!!c.completed,subCards:(c.subCards||[]).map(ns),completedHistory:c.completedHistory||[],createdAt:c.createdAt||Date.now()}}
-function ns(s){return{id:s.id||gid(),title:s.title||'',dueDate:s.dueDate||'',workAmount:s.workAmount||'light',waitingPerson:s.waitingPerson||'',completed:!!s.completed,order:s.order??0}}
+function nc(c){return{id:c.id||gid(),title:c.title||'',dueDate:c.dueDate||'',category:c.category||'',urgent:!!c.urgent,important:!!c.important,tags:c.tags||[],memo:c.memo||'',urls:c.urls||[],isRoutine:!!c.isRoutine,routineType:c.routineType||'daily',routineDay:c.routineDay??1,order:c.order??0,completed:!!c.completed,subCards:(c.subCards||[]).map(ns),completedHistory:c.completedHistory||[],createdAt:c.createdAt||Date.now()}}
+function ns(s){return{id:s.id||gid(),title:s.title||'',dueDate:s.dueDate||'',workAmount:s.workAmount||'light',waitingPerson:s.waitingPerson||'',completed:!!s.completed,order:s.order??0,isRoutine:!!s.isRoutine,routineType:s.routineType||'daily',routineDay:s.routineDay??1}}
 function esc(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;')}
 
 // ─────────────────────────────────────────────
@@ -650,6 +696,11 @@ function renderCard(c){
   if(c.tags.length)tHtml='<div class="tags-r">'+c.tags.map(t=>{const col=getTColor(t);return`<span class="tpill" style="background:${hex2rgba(col,.22)};color:${col};border:1px solid ${hex2rgba(col,.4)}">${esc(t)}</span>`}).join('')+'</div>';
 
   let dHtml=c.dueDate?`<div class="due-ch">📅 ${fmtD(c.dueDate)}${dueLabel(dc)}</div>`:'';
+  // ④ URL表示
+  let urlHtml='';
+  if(c.urls&&c.urls.length){
+    urlHtml='<div class="card-urls">'+c.urls.filter(u=>u.trim()).map(u=>`<a href="${esc(u)}" target="_blank" rel="noopener noreferrer" class="card-url" onclick="event.stopPropagation()">🔗 ${esc(u.length>50?u.slice(0,50)+'…':u)}</a>`).join('')+'</div>';
+  }
   let mHtml=c.memo?`<div class="memo-t">${esc(c.memo)}</div>`:'';
 
   // Sub-card list
@@ -674,7 +725,7 @@ function renderCard(c){
           onclick="event.stopPropagation();handleCardCheck('${c.id}',this)">
         <label for="pchk-${c.id}" class="pchk-label" onclick="event.stopPropagation()">${isDone?'完了済み（クリックで戻す）':'完了にする'}</label>
       </div>
-      ${pHtml}${dHtml}${tHtml}${mHtml}
+      ${pHtml}${dHtml}${tHtml}${mHtml}${urlHtml}
       <div class="subcards">${scHtml}</div>
       <div class="cacts">
         ${routBtn}
@@ -694,6 +745,7 @@ function renderSub(pid,s){
   const wInp=isW?`<input type="text" class="wp-inp" placeholder="担当者名" value="${esc(s.waitingPerson||'')}" onchange="updWP('${pid}','${s.id}',this.value)" onclick="event.stopPropagation()">`:'';
   const wL={light:'軽度','1hour':'1h',more:'1h+',waiting:'他者待ち'};
   const dChip=s.dueDate?`<span>📅${fmtD(s.dueDate)}</span>`:'';
+  const srBadge=s.isRoutine?`<span class="srout-badge">🔄${s.routineType==='daily'?'毎日':s.routineType==='weekly'?'毎週':'毎月'}</span>`:'';
   return`<div class="scard ${dc} ${s.completed?'s-done':''}" id="sc-${s.id}" data-subid="${s.id}" data-pid="${pid}">
     ${dogEar}
     <div class="sbar ${barC}"></div>
@@ -707,7 +759,7 @@ function renderSub(pid,s){
           <button class="btn bico bsm" onclick="delSub('${pid}','${s.id}');event.stopPropagation()">🗑</button>
         </div>
       </div>
-      <div class="s-meta">${dChip}<span>${wL[s.workAmount]||''}</span>${isW&&s.waitingPerson?`<span style="color:#06b6d4">👤${esc(s.waitingPerson)}</span>`:''}</div>
+      <div class="s-meta">${dChip}<span>${wL[s.workAmount]||''}</span>${isW&&s.waitingPerson?`<span style="color:#06b6d4">👤${esc(s.waitingPerson)}</span>`:''} ${srBadge}</div>
       ${wInp}
     </div>
   </div>`
@@ -719,7 +771,8 @@ function renderBoard(){
   // ④ apply badge date filter
   if(dueBadgeFilter){
     const dateStr=dueBadgeFilter==='today'?today():tmr();
-    cards=cards.filter(c=>c.dueDate===dateStr||c.subCards.some(s=>s.dueDate===dateStr));
+    // ②完了済み大カード・完了済みサブカードを除外
+    cards=cards.filter(c=>!c.completed&&(c.dueDate===dateStr||c.subCards.some(s=>!s.completed&&s.dueDate===dateStr)));
   }
   if(!cards.length){board.innerHTML='<div class="empty-st">📭<br><br>該当するカードがありません</div>';return}
   const ordered=S.sortedByDue?[...cards].sort((a,b)=>{if(!a.dueDate)return 1;if(!b.dueDate)return-1;return a.dueDate.localeCompare(b.dueDate)}):[...cards].sort((a,b)=>a.order-b.order);
@@ -755,18 +808,30 @@ function renderDone(){
 
 function renderBadges(){
   const t=today(),tm=tmr();
-  const tc=S.cards.filter(c=>c.dueDate===t||c.subCards.some(s=>s.dueDate===t));
-  const tmc=S.cards.filter(c=>c.dueDate===tm||c.subCards.some(s=>s.dueDate===tm));
+  // ②完了済みサブカードを除外してカウント
+  const tc=S.cards.filter(c=>c.dueDate===t||c.subCards.some(s=>!s.completed&&s.dueDate===t));
+  const tmc=S.cards.filter(c=>c.dueDate===tm||c.subCards.some(s=>!s.completed&&s.dueDate===tm));
   let h='';
   if(tc.length)h+=`<span class="dbadge today${dueBadgeFilter==='today'?' active':''}" onclick="filterByDue('today')" title="今日の期日で絞り込み">📅 今日 ${tc.length}件</span>`;
   if(tmc.length)h+=`<span class="dbadge tmr${dueBadgeFilter==='tmr'?' active':''}" onclick="filterByDue('tmr')" title="明日の期日で絞り込み">📅 明日 ${tmc.length}件</span>`;
   document.getElementById('dueBadges').innerHTML=h;
 }
 
+/* ⑥ 当月外の履歴を削除 */
+function pruneHistory(){
+  const now=new Date();
+  const firstOfMonth=new Date(now.getFullYear(),now.getMonth(),1).getTime();
+  if(S.routHist)S.routHist=S.routHist.filter(h=>h.completedAt>=firstOfMonth);
+}
+
 function renderHist(){
   const el=document.getElementById('routHist');
-  if(!S.routHist||!S.routHist.length){el.innerHTML='<div style="color:var(--text3);font-size:.83rem;padding:6px 0">履歴なし</div>';return}
-  const recent=[...S.routHist].reverse().slice(0,15);
+  // ⑥当月分のみ
+  const now=new Date();
+  const firstOfMonth=new Date(now.getFullYear(),now.getMonth(),1).getTime();
+  const monthly=(S.routHist||[]).filter(h=>h.completedAt>=firstOfMonth);
+  if(!monthly.length){el.innerHTML='<div style="color:var(--text3);font-size:.83rem;padding:6px 0">今月の履歴なし</div>';return}
+  const recent=[...monthly].reverse().slice(0,30);
   el.innerHTML='<div class="hist-list">'+recent.map(h=>{
     const c=[...S.cards,...S.done].find(x=>x.id===h.cardId);
     const title=c?c.title:h.cardTitle||'(削除済み)';
@@ -922,6 +987,8 @@ function resetFilters(){
 function toggleSub(pid,sid,chk){
   const c=S.cards.find(x=>x.id===pid);if(!c)return;
   const s=c.subCards.find(x=>x.id===sid);if(!s)return;
+  // ⑤ サブルーチン完了時はダイアログへ
+  if(chk&&s.isRoutine){openSubRoutDialog(pid,sid);return;}
   s.completed=chk;
   // 全小カード完了 → 確認ポップアップ
   if(allDone(c)&&!c.completed){
@@ -960,18 +1027,18 @@ function delSub(pid,sid){
 // CARD MODAL
 // ─────────────────────────────────────────────
 function openAddCard(){
-  editCardId=null;editTags=[];curTagColor=TAG_COLORS[0];
+  editCardId=null;editTags=[];editUrls=[];curTagColor=TAG_COLORS[0];
   document.getElementById('cmTitle').textContent='📋 カード追加';
   ['cmCardTitle','cmCat','cmMemo'].forEach(id=>document.getElementById(id).value='');
   document.getElementById('cmDue').value=today();
   ['cmUrgent','cmImportant','cmRoutine'].forEach(id=>document.getElementById(id).checked=false);
   document.getElementById('routSec').style.display='none';
-  renderTagArea();renderCP();openModal('cardModal');
+  renderTagArea();renderUrlList();renderCP();openModal('cardModal');
 }
 
 function openEditCard(id){
   const c=S.cards.find(x=>x.id===id);if(!c)return;
-  editCardId=id;editTags=[...c.tags];curTagColor=TAG_COLORS[0];
+  editCardId=id;editTags=[...c.tags];editUrls=[...(c.urls||[])];curTagColor=TAG_COLORS[0];
   document.getElementById('cmTitle').textContent='✏️ カード編集';
   document.getElementById('cmCardTitle').value=c.title;
   document.getElementById('cmDue').value=c.dueDate;
@@ -982,7 +1049,7 @@ function openEditCard(id){
   document.getElementById('cmRoutine').checked=c.isRoutine;
   if(c.isRoutine){document.getElementById('routSec').style.display='block';document.getElementById('rType').value=c.routineType;updateRO();setTimeout(()=>{const d=document.getElementById('rDay');if(d)d.value=c.routineDay},50)}
   else document.getElementById('routSec').style.display='none';
-  renderTagArea();renderCP();openModal('cardModal');
+  renderTagArea();renderUrlList();renderCP();openModal('cardModal');
 }
 
 function saveCard(){
@@ -991,7 +1058,7 @@ function saveCard(){
   const isR=document.getElementById('cmRoutine').checked;
   const rType=document.getElementById('rType').value;
   let rDay=1;const rd=document.getElementById('rDay');if(rd)rDay=parseInt(rd.value)||1;
-  const data={title,dueDate:document.getElementById('cmDue').value,category:document.getElementById('cmCat').value.trim(),urgent:document.getElementById('cmUrgent').checked,important:document.getElementById('cmImportant').checked,tags:[...editTags],memo:document.getElementById('cmMemo').value.trim(),isRoutine:isR,routineType:rType,routineDay:rDay};
+  const data={title,dueDate:document.getElementById('cmDue').value,category:document.getElementById('cmCat').value.trim(),urgent:document.getElementById('cmUrgent').checked,important:document.getElementById('cmImportant').checked,tags:[...editTags],memo:document.getElementById('cmMemo').value.trim(),urls:editUrls.filter(u=>u.trim()),isRoutine:isR,routineType:rType,routineDay:rDay};
   if(editCardId){const c=S.cards.find(x=>x.id===editCardId);if(c)Object.assign(c,data)}
   else{const c=nc({...data,id:gid(),order:S.cards.length,subCards:[],completedHistory:[],createdAt:Date.now()});S.cards.push(c)}
   closeModal('cardModal');render();
@@ -1025,6 +1092,19 @@ function renderTagArea(){
 }
 
 function rmTag(t){editTags=editTags.filter(x=>x!==t);renderTagArea()}
+/* ④ URL管理 */
+function renderUrlList(){
+  const ul=document.getElementById('urlList');if(!ul)return;
+  ul.innerHTML=editUrls.map((url,i)=>`<div class="url-row">
+    <input type="url" class="fi" value="${esc(url)}" placeholder="https://..." oninput="editUrls[${i}]=this.value">
+    <button type="button" class="btn bd bsm" onclick="removeUrl(${i})">✕</button>
+  </div>`).join('');
+  const addBtn=document.getElementById('addUrlBtn');
+  if(addBtn)addBtn.style.display=editUrls.length>=5?'none':'';
+}
+function addUrlField(){if(editUrls.length>=5)return;editUrls.push('');renderUrlList();}
+function removeUrl(i){editUrls.splice(i,1);renderUrlList();}
+
 
 function renderCP(){
   const el=document.getElementById('cprow');
@@ -1051,6 +1131,47 @@ function updateRO(){
 // SUB CARD MODAL
 // ─────────────────────────────────────────────
 function toggleWP(){document.getElementById('wpGrp').style.display=document.getElementById('smWork').value==='waiting'?'block':'none'}
+/* ⑤ サブカードルーチン補助 */
+function toggleSubRS(){
+  document.getElementById('subRoutSec').style.display=document.getElementById('smRoutine').checked?'block':'none';
+  if(document.getElementById('smRoutine').checked)updateSubRO();
+}
+function updateSubRO(){
+  const t=document.getElementById('smRType').value,el=document.getElementById('subRoutOpts');
+  if(t==='daily'){el.innerHTML=''}
+  else if(t==='weekly'){const days=['日','月','火','水','木','金','土'];el.innerHTML=`<div class="fg" style="margin-bottom:0"><label class="flbl">曜日</label><select class="fsel2" id="smRDay">${days.map((d,i)=>`<option value="${i}">${d}曜日</option>`).join('')}</select></div>`}
+  else{el.innerHTML=`<div class="fg" style="margin-bottom:0"><label class="flbl">日付</label><select class="fsel2" id="smRDay">${Array.from({length:31},(_,i)=>`<option value="${i+1}">${i+1}日</option>`).join('')}</select></div>`}
+}
+function openSubRoutDialog(pid,sid){
+  const c=S.cards.find(x=>x.id===pid);if(!c)return;
+  const s=c.subCards.find(x=>x.id===sid);if(!s)return;
+  routSubPid=pid;routSubSid=sid;
+  document.getElementById('subRcTitle').textContent=s.title;
+  document.getElementById('subNextDue').value=calcNext(s.routineType,s.routineDay,s.dueDate||today());
+  openModal('subRoutModal');
+}
+function cancelSubRout(){
+  const el=document.getElementById('sc-'+(routSubSid||''));
+  const chk=el?.querySelector('.s-chk');if(chk)chk.checked=false;
+  closeModal('subRoutModal');routSubPid=null;routSubSid=null;
+}
+function saveSubRout(){_applySubRout(document.getElementById('subNextDue').value);}
+function saveSubRoutNoAdj(){
+  const c=S.cards.find(x=>x.id===routSubPid);if(!c)return;
+  const s=c.subCards.find(x=>x.id===routSubSid);if(!s)return;
+  _applySubRout(calcNext(s.routineType,s.routineDay,s.dueDate||today()));
+}
+function _applySubRout(nd){
+  const c=S.cards.find(x=>x.id===routSubPid);if(!c)return;
+  const s=c.subCards.find(x=>x.id===routSubSid);if(!s)return;
+  S.routHist=S.routHist||[];
+  S.routHist.push({cardId:c.id,cardTitle:c.title+' > '+s.title,completedAt:Date.now(),nextDue:nd});
+  s.dueDate=nd;s.completed=false;
+  closeModal('subRoutModal');
+  toast('🔄 サブタスクルーチン更新！次回: '+fmtD(nd));
+  routSubPid=null;routSubSid=null;render();
+}
+
 
 function openInsertSub(pid,idx){
   editSubId=null;editParId=pid;insertIdx=idx;
@@ -1058,6 +1179,9 @@ function openInsertSub(pid,idx){
   document.getElementById('smName').value='';document.getElementById('smDue').value=today();
   document.getElementById('smWork').value='light';document.getElementById('smWP').value='';
   document.getElementById('wpGrp').style.display='none';
+  // ⑤ ルーチン初期化
+  document.getElementById('smRoutine').checked=false;
+  document.getElementById('subRoutSec').style.display='none';
   openModal('subModal');
 }
 
@@ -1069,6 +1193,14 @@ function openEditSub(pid,sid){
   document.getElementById('smName').value=s.title;document.getElementById('smDue').value=s.dueDate;
   document.getElementById('smWork').value=s.workAmount;document.getElementById('smWP').value=s.waitingPerson||'';
   document.getElementById('wpGrp').style.display=s.workAmount==='waiting'?'block':'none';
+  // ⑤ ルーチン設定
+  document.getElementById('smRoutine').checked=!!s.isRoutine;
+  document.getElementById('subRoutSec').style.display=s.isRoutine?'block':'none';
+  if(s.isRoutine){
+    document.getElementById('smRType').value=s.routineType||'daily';
+    updateSubRO();
+    setTimeout(()=>{const d=document.getElementById('smRDay');if(d)d.value=s.routineDay},50);
+  }
   openModal('subModal');
 }
 
@@ -1076,7 +1208,10 @@ function saveSubCard(){
   const title=document.getElementById('smName').value.trim();
   if(!title){alert('タスク名を入力してください');return}
   const c=S.cards.find(x=>x.id===editParId);if(!c)return;
-  const data={title,dueDate:document.getElementById('smDue').value,workAmount:document.getElementById('smWork').value,waitingPerson:document.getElementById('smWP').value.trim()};
+  const smIsR=document.getElementById('smRoutine').checked;
+  const smRType=document.getElementById('smRType')?.value||'daily';
+  let smRDay=1;const srd=document.getElementById('smRDay');if(srd)smRDay=parseInt(srd.value)||1;
+  const data={title,dueDate:document.getElementById('smDue').value,workAmount:document.getElementById('smWork').value,waitingPerson:document.getElementById('smWP').value.trim(),isRoutine:smIsR,routineType:smRType,routineDay:smRDay};
   if(editSubId){const s=c.subCards.find(x=>x.id===editSubId);if(s)Object.assign(s,data)}
   else{
     const newS=ns({...data,id:gid(),completed:false});
@@ -1361,33 +1496,12 @@ function toast(msg){
 // ─────────────────────────────────────────────
 // INIT + SAMPLE DATA
 // ─────────────────────────────────────────────
-function addSample(){
-  S.tagColors={'趣味':'#1a56db','健康':'#059669','家族':'#d97706','学習':'#7c3aed','買い物':'#0891b2','旅行':'#0284c7'};
-  const t=today(),tm=tmr();
-  S.cards=[
-    nc({id:gid(),title:'読書（毎日ルーチン）',dueDate:t,category:'学習',urgent:false,important:true,tags:['学習'],isRoutine:true,routineType:'daily',order:0,subCards:[
-      ns({id:gid(),title:'読書 30分',workAmount:'light',order:0}),
-      ns({id:gid(),title:'気づきをメモ',workAmount:'light',order:1}),
-    ]}),
-    nc({id:gid(),title:'週末の旅行計画',dueDate:tm,category:'趣味',urgent:false,important:true,tags:['旅行','家族'],memo:'温泉旅行の下調べ',order:1,subCards:[
-      ns({id:gid(),title:'宿の候補を調べる',workAmount:'light',order:0}),
-      ns({id:gid(),title:'交通手段を確認',workAmount:'light',completed:true,order:1}),
-      ns({id:gid(),title:'持ち物リスト作成',workAmount:'light',order:2}),
-    ]}),
-    nc({id:gid(),title:'健康管理',dueDate:t,category:'健康',urgent:true,important:true,tags:['健康'],order:2,subCards:[
-      ns({id:gid(),title:'ランニング 30分',workAmount:'light',order:0}),
-      ns({id:gid(),title:'野菜中心の食事',workAmount:'light',order:1}),
-    ]}),
-    nc({id:gid(),title:'週末の買い物',dueDate:tm,category:'買い物',urgent:false,important:false,tags:['買い物'],order:3,subCards:[
-      ns({id:gid(),title:'食材（野菜・肉・魚）',workAmount:'light',completed:true,order:0}),
-      ns({id:gid(),title:'日用品（シャンプー等）',workAmount:'light',order:1}),
-    ]}),
-  ];
-}
+// ⑦ サンプルデータは使用しない
 
 document.addEventListener('keydown',e=>{if(e.key==='Escape')document.querySelectorAll('.mover.vis').forEach(m=>closeModal(m.id))});
 
 load(); // migrate legacy data if present
+pruneHistory(); // ⑥当月外の履歴を削除
 cloudLoad(); // fetch from cloud (or LS cache if offline)
 </script>
 </body>
