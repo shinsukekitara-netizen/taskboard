@@ -505,12 +505,16 @@ const JBBASE='https://api.jsonbin.io/v3/b';
 const BIN_ID='69f96d08aaba882197712a9b'; // 固定BIN ID
 const LS_DIRTY='tb3_dirty';
 const LS_CACHE='tb3_cache';
+const LS_STASH='tb3_stash'; // A案：競合時の退避キー
 
 let _saveTimer=null;
 let _saving=false;
-let _isLoading=false; // 読込中はsaveをブロック
-let _binId=BIN_ID; // 常に固定
+let _isLoading=false;   // 読込中はsaveをブロック
+let _binId=BIN_ID;         // 常に固定
 let _online=navigator.onLine;
+let _localVersion=0;       // A案：読込時のBINバージョンを記録
+let _lastSyncTime=0;       // 追加対策①：タブフォーカス同期スロットル
+const _SYNC_THROTTLE=30000;// 追加対策①：再同期の最小間隔(ms)
 
 /* ── Sync status UI ── */
 function setSyncUI(state,msg,showRetry=false){
@@ -543,6 +547,7 @@ function applyData(d){
   S.tagColors=d.tagColors||{};
   S.routHist=d.routHist||[];
   S.sortedByDue=!!d.sortedByDue;
+  _localVersion=Number(d.version)||0; // A案：バージョンを記録
 }
 
 /* ── Sync dirty data on reconnect ── */
@@ -560,14 +565,31 @@ async function cloudSave(){
   _saving=true;
   setSyncUI('saving','保存中…');
   try{
+    // ─── A案①：保存前にBINのバージョンを確認 ───
+    const chk=await fetch(`${JBBASE}/${BIN_ID}/latest`,{headers:{'X-Master-Key':JBKEY}});
+    if(chk.ok){
+      const chkJson=await chk.json();
+      const remoteVer=Number((chkJson.record||chkJson).version)||0;
+      if(remoteVer!==_localVersion){
+        // A案②③：競合検知 → 退避 → 警告表示
+        _saving=false;
+        lsSave();
+        try{localStorage.setItem(LS_STASH,localStorage.getItem(LS_CACHE));}catch(_){}
+        showConflictWarning();
+        return;
+      }
+    }
+    // バージョン一致 → バージョン+1して保存
+    S.version=_localVersion+1;
     const res=await fetch(`${JBBASE}/${BIN_ID}`,{
       method:'PUT',
       headers:{'Content-Type':'application/json','X-Master-Key':JBKEY},
       body:JSON.stringify(S)
     });
     if(!res.ok)throw new Error(res.status);
-    localStorage.removeItem(LS_DIRTY);
-    setSyncUI('ok','クラウド保存済み ✓');
+    _localVersion=S.version; // 保存成功後にローカルバージョンを更新
+    lsSave();localStorage.removeItem(LS_DIRTY);
+    setSyncUI('ok','クラウド保存済み ✓ (v'+_localVersion+')');
   }catch(e){
     setSyncUI('err','保存失敗: '+e.message,true);
     toast('⚠️ クラウド保存に失敗しました');
@@ -598,6 +620,7 @@ async function cloudLoad(isManual=false){
     }
     pruneHistory(); // ⑥当月外の履歴を削除
     _isLoading=false; // ①読込完了 — 保存を解放
+    _lastSyncTime=Date.now(); // 追加対策①：同期時刻を記録
     render();
     setSyncUI('ok','読込完了 ✓'+(isManual?' （手動更新）':''));
   }catch(e){
@@ -612,19 +635,108 @@ async function cloudLoad(isManual=false){
   }
 }
 
-/* ── Online / offline events ── */
+/* ── Online / offline events （追加対策②） ── */
 window.addEventListener('online',()=>{
   _online=true;
   if(localStorage.getItem(LS_DIRTY)){
-    setSyncUI('saving','オンライン復帰 — 同期中…');
-    cloudSave().then(()=>toast('☁️ オフライン中の変更を同期しました'));
+    setSyncUI('saving','オンライン復帰 — バージョン確認中…');
+    // 追加対策②：復帰時もバージョン確認を実施（競合があれば警告）
+    cloudSave().then(()=>{
+      if(!document.getElementById('conflictBar'))
+        toast('☁️ オフライン中の変更を同期しました');
+    }).catch(()=>setSyncUI('err','同期失敗',true));
   }else{setSyncUI('ok','オンライン')}
 });
 window.addEventListener('offline',()=>{
   _online=false;
-  setSyncUI('off','オフライン（ローカル保存中）');
+  setSyncUI('off','オフライン — ローカル保存中');
   toast('📴 オフラインです。変更はローカルに保存されます');
 });
+
+
+/* ══════════════════════════════════════════
+   A案：競合警告・退避データ復元
+   ══════════════════════════════════════════ */
+function showConflictWarning(){
+  setSyncUI('err','競合を検出 — 下のバーを確認してください');
+  document.getElementById('conflictBar')?.remove();
+  const bar=document.createElement('div');
+  bar.id='conflictBar';
+  bar.style.cssText='position:sticky;top:0;z-index:500;background:#451a03;border-bottom:2px solid #92400e;color:#fde68a;padding:11px 16px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;font-size:.84rem;line-height:1.5';
+  bar.innerHTML=`
+    <span>⚠️ <strong>他の端末でデータが更新されています。</strong><br>
+    最新データを読み込んでから再度保存してください。<br>
+    <small style="opacity:.8">※入力中の内容は一時保存されています</small></span>
+    <button onclick="resolveConflict()" style="background:#d97706;color:#fff;padding:9px 16px;border:none;border-radius:6px;cursor:pointer;font-size:.84rem;font-weight:600;white-space:nowrap;flex-shrink:0">
+      最新データを読み込む
+    </button>`;
+  const syncBar=document.querySelector('.sync-bar');
+  syncBar?syncBar.insertAdjacentElement('afterend',bar):document.body.prepend(bar);
+}
+
+async function resolveConflict(){
+  document.getElementById('conflictBar')?.remove();
+  await cloudLoad(false); // 最新BINデータを読込
+  // 退避データがあれば復元オプションを表示
+  if(localStorage.getItem(LS_STASH)){
+    const bar=document.createElement('div');
+    bar.id='restoreBar';
+    bar.style.cssText='position:sticky;top:0;z-index:500;background:#0c1a2e;border-bottom:2px solid #1d4ed8;color:#93c5fd;padding:10px 16px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;font-size:.83rem';
+    bar.innerHTML=`
+      <span>💾 <strong>一時保存したデータがあります。</strong>内容を確認して再保存できます。</span>
+      <button onclick="restoreStash()" style="background:#1d4ed8;color:#fff;padding:7px 14px;border:none;border-radius:6px;cursor:pointer;font-size:.82rem;white-space:nowrap">
+        内容を復元して再編集
+      </button>
+      <button onclick="discardStash()" style="background:transparent;border:1px solid rgba(147,197,253,.4);color:#93c5fd;padding:7px 12px;border-radius:6px;cursor:pointer;font-size:.82rem;white-space:nowrap">
+        破棄する
+      </button>`;
+    const syncBar=document.querySelector('.sync-bar');
+    syncBar?syncBar.insertAdjacentElement('afterend',bar):document.body.prepend(bar);
+  }
+}
+
+function restoreStash(){
+  try{
+    const raw=localStorage.getItem(LS_STASH);
+    if(!raw)return;
+    const d=JSON.parse(raw);
+    // 現在のBINバージョンをベースに退避データの内容を復元
+    applyData(d);
+    render();
+    document.getElementById('restoreBar')?.remove();
+    localStorage.removeItem(LS_STASH);
+    toast('💾 退避データを復元しました。内容を確認後、保存してください。');
+  }catch(e){document.getElementById('restoreBar')?.remove();}
+}
+
+function discardStash(){
+  localStorage.removeItem(LS_STASH);
+  document.getElementById('restoreBar')?.remove();
+  toast('🗑 一時保存データを破棄しました');
+}
+
+/* ══════════════════════════════════════════
+   追加対策①：タブフォーカス時の自動同期
+   ══════════════════════════════════════════ */
+function _isEditingForm(){
+  const a=document.activeElement;
+  if(a&&['INPUT','TEXTAREA','SELECT'].includes(a.tagName))return true;
+  return !!document.querySelector('.mover.vis'); // モーダル表示中
+}
+
+function _tabFocusSync(){
+  if(!_online||_isLoading)return;
+  if(_isEditingForm())return; // 入力中はスキップ
+  if(Date.now()-_lastSyncTime<_SYNC_THROTTLE)return; // スロットル
+  _lastSyncTime=Date.now();
+  setSyncUI('saving','同期中…');
+  cloudLoad(false).catch(()=>{});
+}
+
+document.addEventListener('visibilitychange',()=>{
+  if(document.visibilityState==='visible')_tabFocusSync();
+});
+window.addEventListener('focus',_tabFocusSync);
 
 /* ── Legacy LS key migration ── */
 function load(){
