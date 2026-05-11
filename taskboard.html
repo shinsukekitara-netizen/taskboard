@@ -205,7 +205,7 @@ body{font-family:'Noto Sans JP',sans-serif;background:var(--bg);color:var(--text
 
 /* ── CARD URLS ── */
 .card-urls{display:flex;flex-direction:column;gap:4px;margin-bottom:8px}
-.card-url{font-size:.75rem;color:var(--accent);text-decoration:none;display:flex;align-items:center;gap:4px;padding:3px 6px;background:rgba(79,142,247,.08);border-radius:4px;border:1px solid rgba(79,142,247,.2);word-break:break-all;overflow-wrap:break-word;transition:background .15s}
+.card-url{font-size:.75rem;color:var(--accent);text-decoration:none;display:flex;align-items:center;gap:4px;padding:3px 6px;background:rgba(79,142,247,.08);border-radius:4px;border:1px solid rgba(79,142,247,.2);word-break:break-all;overflow-wrap:break-word;transition:background .15s;cursor:pointer}
 .card-url:hover{background:rgba(79,142,247,.16)}
 .url-row{display:flex;gap:6px;margin-bottom:6px;align-items:center}
 .url-row .fi{flex:1}
@@ -1432,7 +1432,7 @@ function initDrag(){
 /* ── Pointerdown — parent card ── */
 function _cardDown(e){
   if(e.button&&e.button!==0)return;
-  if(e.target.closest('button,.ins-btn,.s-chk,.wp-inp,.pchk,label'))return;
+  if(e.target.closest('button,.ins-btn,.s-chk,.wp-inp,.pchk,label,.card-url,a'))return;
   if(DG.on||DG.pending)return;
   const isTouch=e.pointerType==='touch';
   const onHandle=e.target.closest('.drag-handle[data-handle="p"]');
@@ -1454,7 +1454,7 @@ function _cardDown(e){
 /* ── Pointerdown — sub card ── */
 function _subDown(e){
   if(e.button&&e.button!==0)return;
-  if(e.target.closest('button,.ins-btn,.s-chk,.wp-inp,.pchk,label'))return;
+  if(e.target.closest('button,.ins-btn,.s-chk,.wp-inp,.pchk,label,.card-url,a'))return;
   if(DG.on||DG.pending)return;
   e.stopPropagation();
   const isTouch=e.pointerType==='touch';
