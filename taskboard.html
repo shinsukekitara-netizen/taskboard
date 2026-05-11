@@ -514,7 +514,18 @@ let _binId=BIN_ID;         // 常に固定
 let _online=navigator.onLine;
 let _localVersion=0;       // A案：読込時のBINバージョンを記録
 let _lastSyncTime=0;       // 追加対策①：タブフォーカス同期スロットル
+let _lastSyncError=0;      // エラー後のクールダウン管理
 const _SYNC_THROTTLE=30000;// 追加対策①：再同期の最小間隔(ms)
+const _ERROR_COOLDOWN=60000;// エラー後の再試行クールダウン(ms)
+
+
+/* ── Fetch with timeout（Promise.race方式 — AbortSignal不使用） ── */
+async function fetchWithTimeout(url, options={}, ms=12000){
+  const timeoutP=new Promise((_,reject)=>
+    setTimeout(()=>reject(new Error('タイムアウト（12秒）')),ms)
+  );
+  return Promise.race([fetch(url,options),timeoutP]);
+}
 
 /* ── Sync status UI ── */
 function setSyncUI(state,msg,showRetry=false){
@@ -566,27 +577,32 @@ async function cloudSave(){
   setSyncUI('saving','保存中…');
   try{
     // ─── A案①：保存前にBINのバージョンを確認 ───
-    const chk=await fetch(`${JBBASE}/${BIN_ID}/latest`,{headers:{'X-Master-Key':JBKEY}});
-    if(chk.ok){
-      const chkJson=await chk.json();
-      const remoteVer=Number((chkJson.record||chkJson).version)||0;
-      if(remoteVer!==_localVersion){
-        // A案②③：競合検知 → 退避 → 警告表示
-        _saving=false;
-        lsSave();
-        try{localStorage.setItem(LS_STASH,localStorage.getItem(LS_CACHE));}catch(_){}
-        showConflictWarning();
-        return;
+    try{
+      const chk=await fetchWithTimeout(`${JBBASE}/${BIN_ID}/latest`,{headers:{'X-Master-Key':JBKEY}});
+      if(chk.ok){
+        const chkJson=await chk.json();
+        const remoteVer=Number((chkJson.record||chkJson).version)||0;
+        if(remoteVer!==_localVersion){
+          // A案②③：競合検知 → 退避 → 警告表示
+          _saving=false;
+          lsSave();
+          try{localStorage.setItem(LS_STASH,localStorage.getItem(LS_CACHE));}catch(_){}
+          showConflictWarning();
+          return;
+        }
       }
+    }catch(chkErr){
+      // バージョンチェック失敗（ネットワーク瞬断等）→ ログのみ、保存は続行
+      console.warn('Version check skipped:',chkErr.message);
     }
     // バージョン一致 → バージョン+1して保存
     S.version=_localVersion+1;
-    const res=await fetch(`${JBBASE}/${BIN_ID}`,{
+    const res=await fetchWithTimeout(`${JBBASE}/${BIN_ID}`,{
       method:'PUT',
       headers:{'Content-Type':'application/json','X-Master-Key':JBKEY},
       body:JSON.stringify(S)
     });
-    if(!res.ok)throw new Error(res.status);
+    if(!res.ok)throw new Error('HTTP '+res.status);
     _localVersion=S.version; // 保存成功後にローカルバージョンを更新
     lsSave();localStorage.removeItem(LS_DIRTY);
     setSyncUI('ok','クラウド保存済み ✓ (v'+_localVersion+')');
@@ -607,9 +623,15 @@ async function cloudLoad(isManual=false){
   }
   setSyncUI('saving','データを読込中…');
   try{
-    const res=await fetch(`${JBBASE}/${BIN_ID}/latest`,{
-      headers:{'X-Master-Key':JBKEY}
-    });
+    let res;
+    try{
+      res=await fetchWithTimeout(`${JBBASE}/${BIN_ID}/latest`,{headers:{'X-Master-Key':JBKEY}});
+    }catch(e){
+      // ネットワークエラー → 2秒後に1回リトライ
+      setSyncUI('saving','再試行中…');
+      await new Promise(r=>setTimeout(r,2000));
+      res=await fetchWithTimeout(`${JBBASE}/${BIN_ID}/latest`,{headers:{'X-Master-Key':JBKEY}});
+    }
     if(!res.ok)throw new Error('HTTP '+res.status);
     const json=await res.json();
     const data=json.record||json;
@@ -619,19 +641,21 @@ async function cloudLoad(isManual=false){
       lsSave();localStorage.removeItem(LS_DIRTY);
     }
     pruneHistory(); // ⑥当月外の履歴を削除
-    _isLoading=false; // ①読込完了 — 保存を解放
-    _lastSyncTime=Date.now(); // 追加対策①：同期時刻を記録
-    render();
+    _lastSyncTime=Date.now();
+    render(); // ★ render()→save()をブロックするため_isLoading=falseは後で
+    _isLoading=false; // ①読込完了 — render()の後でfalseに
     setSyncUI('ok','読込完了 ✓'+(isManual?' （手動更新）':''));
   }catch(e){
-    console.error('cloudLoad error:',e);
     // エラー時はキャッシュを使用（BINデータは上書きしない）
     lsLoad();
     pruneHistory();
-    _isLoading=false;
-    render();
-    setSyncUI('err','読込失敗: '+e.message,true);
-    toast('⚠️ クラウド読込失敗。キャッシュを使用します');
+    _lastSyncTime=Date.now();  // ★再トリガー防止
+    _lastSyncError=Date.now(); // ★クールダウン開始
+    render(); // ★ _isLoading=falseより先にrender → save()をブロック
+    _isLoading=false; // render()の後でfalseに
+    const errMsg=e.message||'不明なエラー';
+    setSyncUI('err','読込失敗（キャッシュ使用中）',true);
+    if(_online&&isManual)toast('⚠️ BIN読込失敗: '+errMsg); // 手動時のみtoast
   }
 }
 
@@ -700,8 +724,11 @@ function restoreStash(){
     const raw=localStorage.getItem(LS_STASH);
     if(!raw)return;
     const d=JSON.parse(raw);
-    // 現在のBINバージョンをベースに退避データの内容を復元
+    // ★ループ防止: 最新BINのバージョンを保持したまま内容だけ復元
+    const currentVer=_localVersion; // cloudLoadで更新済みの最新版を記憶
     applyData(d);
+    _localVersion=currentVer; // 古い退避データのversionで上書きされるのを防ぐ
+    S.version=currentVer;    // 保存時に currentVer+1 が使われるよう統一
     render();
     document.getElementById('restoreBar')?.remove();
     localStorage.removeItem(LS_STASH);
@@ -726,8 +753,10 @@ function _isEditingForm(){
 
 function _tabFocusSync(){
   if(!_online||_isLoading)return;
-  if(_isEditingForm())return; // 入力中はスキップ
-  if(Date.now()-_lastSyncTime<_SYNC_THROTTLE)return; // スロットル
+  if(_isEditingForm())return;                           // 入力中はスキップ
+  if(localStorage.getItem(LS_DIRTY))return;             // 未保存変更あり → スキップ
+  if(Date.now()-_lastSyncError<_ERROR_COOLDOWN)return;  // ★エラー後1分はスキップ
+  if(Date.now()-_lastSyncTime<_SYNC_THROTTLE)return;    // スロットル（30秒）
   _lastSyncTime=Date.now();
   setSyncUI('saving','同期中…');
   cloudLoad(false).catch(()=>{});
