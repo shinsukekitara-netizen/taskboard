@@ -30,6 +30,7 @@ body{font-family:'Noto Sans JP',sans-serif;background:var(--bg);color:var(--text
 .dbadge.today{background:rgba(239,68,68,.18);border:1px solid #ef4444;color:#fca5a5}
 .dbadge.tmr{background:rgba(245,158,11,.18);border:1px solid #f59e0b;color:#fcd34d}
 .dbadge.active{box-shadow:0 0 0 2px currentColor;transform:scale(1.07);filter:brightness(1.2)}
+.dbadge.past{background:rgba(249,115,22,.2);border:1px solid #f97316;color:#fb923c}
 .hdr-btns{margin-left:auto;display:flex;gap:8px;flex-wrap:wrap}
 
 /* ── BUTTONS ── */
@@ -813,7 +814,7 @@ function bandCls(c){if(c.urgent&&c.important)return'b-ri';if(c.urgent)return'b-r
 function cardBg(c){if(c.tags&&c.tags.length){const col=getTColor(c.tags[0]);return hex2rgba(col,.28)}return'var(--surface)'}
 
 // ④⑤ badge filter state
-let dueBadgeFilter=null; // 'today' | 'tmr' | null
+let dueBadgeFilter=null; // 'today' | 'tmr' | 'past' | null
 
 // ─────────────────────────────────────────────
 // RENDER
@@ -912,9 +913,18 @@ function renderBoard(){
   let cards=filteredCards!==null?filteredCards:S.cards;
   // ④ apply badge date filter
   if(dueBadgeFilter){
-    const dateStr=dueBadgeFilter==='today'?today():tmr();
-    // ②完了済み大カード・完了済みサブカードを除外
-    cards=cards.filter(c=>!c.completed&&(c.dueDate===dateStr||c.subCards.some(s=>!s.completed&&s.dueDate===dateStr)));
+    const t=today();
+    if(dueBadgeFilter==='past'){
+      // ①期限切れ：大カード・小カード両方対象、完了済み除外
+      cards=cards.filter(c=>!c.completed&&(
+        (c.dueDate&&c.dueDate<t)||
+        c.subCards.some(s=>!s.completed&&s.dueDate&&s.dueDate<t)
+      ));
+    } else {
+      const dateStr=dueBadgeFilter==='today'?t:tmr();
+      // ②完了済み大カード・完了済みサブカードを除外
+      cards=cards.filter(c=>!c.completed&&(c.dueDate===dateStr||c.subCards.some(s=>!s.completed&&s.dueDate===dateStr)));
+    }
   }
   if(!cards.length){board.innerHTML='<div class="empty-st">📭<br><br>該当するカードがありません</div>';return}
   const ordered=S.sortedByDue?[...cards].sort((a,b)=>{if(!a.dueDate)return 1;if(!b.dueDate)return-1;return a.dueDate.localeCompare(b.dueDate)}):[...cards].sort((a,b)=>a.order-b.order);
@@ -953,7 +963,13 @@ function renderBadges(){
   // ②完了済みサブカードを除外してカウント
   const tc=S.cards.filter(c=>c.dueDate===t||c.subCards.some(s=>!s.completed&&s.dueDate===t));
   const tmc=S.cards.filter(c=>c.dueDate===tm||c.subCards.some(s=>!s.completed&&s.dueDate===tm));
+  // ①過去期日：大カード・小カード両方カウント（完了済み除外）
+  const pastc=S.cards.filter(c=>
+    (c.dueDate&&c.dueDate<t)||
+    c.subCards.some(s=>!s.completed&&s.dueDate&&s.dueDate<t)
+  );
   let h='';
+  if(pastc.length)h+=`<span class="dbadge past${dueBadgeFilter==='past'?' active':''}" onclick="filterByDue('past')" title="期限切れで絞り込み">⚠️ 期限切れ ${pastc.length}件</span>`;
   if(tc.length)h+=`<span class="dbadge today${dueBadgeFilter==='today'?' active':''}" onclick="filterByDue('today')" title="今日の期日で絞り込み">📅 今日 ${tc.length}件</span>`;
   if(tmc.length)h+=`<span class="dbadge tmr${dueBadgeFilter==='tmr'?' active':''}" onclick="filterByDue('tmr')" title="明日の期日で絞り込み">📅 明日 ${tmc.length}件</span>`;
   document.getElementById('dueBadges').innerHTML=h;
@@ -1111,19 +1127,30 @@ function sortByDue(){S.sortedByDue=!S.sortedByDue;document.getElementById('sortB
 function filterByDue(type){
   dueBadgeFilter=dueBadgeFilter===type?null:type; // トグル
   renderBoard();renderBadges();
-  if(dueBadgeFilter)toast(`📅 ${type==='today'?'今日':'明日'}の期日で絞り込み中`);
+  if(dueBadgeFilter)toast(`${{today:'📅 今日',tmr:'📅 明日',past:'⚠️ 期限切れ'}[type]||''}の期日で絞り込み中`);
 }
 
 // ⑤ ロゴクリックで全リセット
 function resetFilters(){
-  if(!dueBadgeFilter&&filteredCards===null&&!document.getElementById('searchInput').value)return;
+  const hasFilter=dueBadgeFilter||filteredCards!==null||
+    document.getElementById('searchInput').value||
+    document.getElementById('fCat').value||
+    document.getElementById('fTag').value||
+    document.getElementById('fPri').value||
+    S.sortedByDue;
+  if(!hasFilter)return;
   dueBadgeFilter=null;filteredCards=null;
+  // ②すべてのフィルター・ソートを解除
   document.getElementById('searchInput').value='';
   document.getElementById('fCat').value='';
   document.getElementById('fTag').value='';
   document.getElementById('fPri').value='';
+  if(S.sortedByDue){
+    S.sortedByDue=false;
+    document.getElementById('sortBtn').classList.remove('sort-on');
+  }
   renderBoard();renderBadges();
-  toast('🔄 絞り込みを解除しました');
+  toast('🔄 すべての絞り込みを解除しました');
 }
 
 function toggleSub(pid,sid,chk){
