@@ -566,6 +566,7 @@ function _initKeyState(){
   console.log('  キー数   :', JBKEYS.length);
   console.log('  使用キー :', _ks.keyIdx+1, '/', JBKEYS.length);
   console.log('  キー先頭 :', _getCurrentKey().slice(0,20)+'...');
+  console.log('使用中APIキー：' + _getCurrentKey().slice(0,14) + '...');
   console.log('  今月回数 :', _totalCount(), '/ '+KEY_LIMIT*JBKEYS.length);
   console.groupEnd();
 }
