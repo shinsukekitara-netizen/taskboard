@@ -516,11 +516,11 @@ function gid(){return Date.now().toString(36)+Math.random().toString(36).slice(2
 // CLOUD SYNC — JSONBin.io  (APIキー自動ローテーション)
 // ─────────────────────────────────────────────
 const JBKEYS=[
-  '$2a$10$9dqlPrIfdQVZQiQ2L1.72.3eLk3RxRAdoNyxPW2UcgEZ7d0k8wjk.',  // キー①
-  '$2a$10$j8ryIVTXB6vRMG4ylmLM2uwDKheXbGUJxC4d/sVjZ3.ZZFDdcP6Hi',  // キー②
-  '$2a$10$CcWrVprcBuSLKe27kjhCr.zGUkvb7XmOwpZhhLRx.HIhQq2F0hK4W',  // キー③
-  '$2a$10$PPXseZMfyhOY7burmTbeAOGDnvOet7QLIGjvDJJuZuo38fwZfSnRW',  // キー④
-  '$2a$10$ej5f2T0JF2UJZSX/6/ThT.f6tzom3BbapyEwIAp.f6ehCc5y6ox16',  // キー⑤
+  "$2a$10$9dqlPrIfdQVZQiQ2L1.72.3eLk3RxRAdoNyxPW2UcgEZ7d0k8wjk.",  // キー①
+  "$2a$10$j8ryIVTXB6vRMG4ylmLM2uwDKheXbGUJxC4d/sVjZ3.ZZFDdcP6Hi",  // キー②
+  "$2a$10$CcWrVprcBuSLKe27kjhCr.zGUkvb7XmOwpZhhLRx.HIhQq2F0hK4W",  // キー③
+  "$2a$10$PPXseZMfyhOY7burmTbeAOGDnvOet7QLIGjvDJJuZuo38fwZfSnRW",  // キー④
+  "$2a$10$ej5f2T0JF2UJZSX/6/ThT.f6tzom3BbapyEwIAp.f6ehCc5y6ox16",  // キー⑤
 ];
 const KEY_LIMIT=8000;        // 1キーあたりの自動切替しきい値
 const JBBASE='https://api.jsonbin.io/v3/b';
@@ -566,7 +566,11 @@ function _initKeyState(){
   console.log('  キー数   :', JBKEYS.length);
   console.log('  使用キー :', _ks.keyIdx+1, '/', JBKEYS.length);
   console.log('  キー先頭 :', _getCurrentKey().slice(0,20)+'...');
-  console.log('使用中APIキー：' + _getCurrentKey().slice(0,14) + '...');
+  const _activeKey=_getCurrentKey();
+  const _keyClean=/^[\x21-\x7E]+$/.test(_activeKey);
+  console.log('使用中APIキー：' + _activeKey.slice(0,14) + '...');
+  console.log('  キー長:', _activeKey.length, '文字 |', _keyClean ? '✅ ASCII clean' : '❌ 非ASCII/空白混入あり');
+  if(!_keyClean) console.error('⚠ キーに不正文字:', JSON.stringify(_activeKey));
   console.log('  今月回数 :', _totalCount(), '/ '+KEY_LIMIT*JBKEYS.length);
   console.groupEnd();
 }
@@ -596,7 +600,11 @@ window.tbDiag=async function(){
   console.groupEnd();
 };
 
-function _getCurrentKey(){return JBKEYS[_ks.keyIdx>=0&&_ks.keyIdx<JBKEYS.length?_ks.keyIdx:0]}
+function _getCurrentKey(){
+  const raw=JBKEYS[_ks.keyIdx>=0&&_ks.keyIdx<JBKEYS.length?_ks.keyIdx:0];
+  // 改行・スペース・制御文字が混入していても除去して安全に返す
+  return raw.replace(/[\r\n\t ]/g,"");
+}
 function _totalCount(){return(_ks.counts||[]).reduce((a,b)=>a+b,0)}
 
 function _trackRequest(){
