@@ -336,6 +336,8 @@ body{font-family:'Noto Sans JP',sans-serif;background:var(--bg);color:var(--text
   <span class="sync-msg" id="syncMsg">初期化中…</span>
   <span class="sync-id" id="syncId"></span>
   <button class="sync-retry" id="syncRetryBtn" style="display:none" onclick="cloudLoad(true)">↺ 再試行</button>
+  <button class="sync-retry" onclick="openKeyStats()" title="APIキー使用状況" style="margin-left:4px">🔑 キー使用状況</button>
+  <span id="syncKeyBadge" style="font-size:.65rem;color:var(--text3);margin-left:4px"></span>
 </div>
 
 <div class="fbar">
@@ -371,6 +373,17 @@ body{font-family:'Noto Sans JP',sans-serif;background:var(--bg);color:var(--text
     <div id="routHist"></div>
   </div>
 </main>
+
+<!-- ===== KEY STATS MODAL ===== -->
+<div class="mover" id="keyStatsModal">
+<div class="modal" style="max-width:420px">
+  <h2 id="ksTitle">🔑 APIキー使用状況</h2>
+  <div id="ksBody"></div>
+  <div class="mfoot">
+    <button class="btn bg" onclick="closeModal('keyStatsModal')">閉じる</button>
+  </div>
+</div>
+</div>
 
 <!-- ===== CARD MODAL ===== -->
 <div class="mover" id="cardModal">
@@ -499,35 +512,172 @@ let filteredCards=null;
 
 function gid(){return Date.now().toString(36)+Math.random().toString(36).slice(2,9)}
 // ─────────────────────────────────────────────
-// CLOUD SYNC — JSONBin.io
+// CLOUD SYNC — JSONBin.io  (APIキー自動ローテーション)
 // ─────────────────────────────────────────────
-const JBKEY='$2a$10$9dqlPrIfdQVZQiQ2L1.72.3eLk3RxRAdoNyxPW2UcgEZ7d0k8wjk.';
+const JBKEYS=[
+  '$2a$10$9dqlPrIfdQVZQiQ2L1.72.3eLk3RxRAdoNyxPW2UcgEZ7d0k8wjk.',  // キー①
+  '$2a$10$j8ryIVTXB6vRMG4ylmLM2uwDKheXbGUJxC4d/sVjZ3.ZZFDdcP6Hi',  // キー②
+  '$2a$10$CcWrVprcBuSLKe27kjhCr.zGUkvb7XmOwpZhhLRx.HIhQq2F0hK4W',  // キー③
+  '$2a$10$PPXseZMfyhOY7burmTbeAOGDnvOet7QLIGjvDJJuZuo38fwZfSnRW',  // キー④
+  '$2a$10$ej5f2T0JF2UJZSX/6/ThT.f6tzom3BbapyEwIAp.f6ehCc5y6ox16',  // キー⑤
+];
+const KEY_LIMIT=8000;        // 1キーあたりの自動切替しきい値
 const JBBASE='https://api.jsonbin.io/v3/b';
 const BIN_ID='69f96d08aaba882197712a9b'; // 固定BIN ID
 const LS_DIRTY='tb3_dirty';
 const LS_CACHE='tb3_cache';
-const LS_STASH='tb3_stash'; // A案：競合時の退避キー
-const LS_BACKUP='tb3_backup'; // エラー時バックアップ
-const LS_REQ_COUNT='tb3_req_count'; // 月間リクエスト数管理
-const REQ_WARN_LIMIT=8000; // 警告しきい値
+const LS_STASH='tb3_stash';
+const LS_BACKUP='tb3_backup';
+const LS_KEY_STATE='tb3_keystate'; // キーローテーション状態管理
 
 let _saveTimer=null;
 let _saving=false;
-let _isLoading=false;   // 読込中はsaveをブロック
-let _binId=BIN_ID;         // 常に固定
+let _isLoading=false;
 let _online=navigator.onLine;
-let _localVersion=0;       // A案：読込時のBINバージョンを記録
-let _lastSyncTime=0;       // 追加対策①：タブフォーカス同期スロットル
-let _lastSyncError=0;      // エラー後のクールダウン管理
-const _SYNC_THROTTLE=300000;// タブフォーカス同期の最小間隔(ms) — 5分
-const _ERROR_COOLDOWN=60000;// エラー後の再試行クールダウン(ms)
+let _localVersion=0;
+let _lastSyncTime=0;
+let _lastSyncError=0;
+const _SYNC_THROTTLE=300000; // タブフォーカス同期の最小間隔(ms) — 5分
+const _ERROR_COOLDOWN=60000;
 
+// ─────────────────────────────────────────────
+// KEY ROTATION STATE
+// ─────────────────────────────────────────────
+let _ks={month:'',keyIdx:0,counts:[0,0,0,0,0]};
 
-/* ── Fetch with timeout（Promise.race方式 — AbortSignal不使用） ── */
-async function fetchWithTimeout(url, options={}, ms=12000){
-  const timeoutP=new Promise((_,reject)=>
-    setTimeout(()=>reject(new Error('タイムアウト（12秒）')),ms)
-  );
+function _ym(){const n=new Date();return n.getFullYear()+'-'+(n.getMonth()+1)}
+function _ksLoad(){try{const r=localStorage.getItem(LS_KEY_STATE);if(r){const p=JSON.parse(r);_ks={month:p.month||'',keyIdx:p.keyIdx||0,counts:p.counts||[0,0,0,0,0]};}}catch(e){}}
+function _ksSave(){try{localStorage.setItem(LS_KEY_STATE,JSON.stringify(_ks))}catch(e){}}
+
+function _initKeyState(){
+  _ksLoad();
+  const ym=_ym();
+  if(_ks.month!==ym){
+    const old=_ks.month;
+    _ks={month:ym,keyIdx:0,counts:[0,0,0,0,0]};
+    _ksSave();
+    if(old)setTimeout(()=>toast('🔄 月が変わりました。APIキーをキー①からリスタートします'),800);
+  }
+}
+
+function _getCurrentKey(){return JBKEYS[_ks.keyIdx>=0&&_ks.keyIdx<JBKEYS.length?_ks.keyIdx:0]}
+function _totalCount(){return(_ks.counts||[]).reduce((a,b)=>a+b,0)}
+
+function _trackRequest(){
+  const idx=_ks.keyIdx;
+  _ks.counts[idx]=((_ks.counts[idx]||0)+1);
+  _ksSave();
+  _updateSyncKeyBadge();
+  if(_ks.counts[idx]>=KEY_LIMIT)_rotateKey();
+}
+
+function _rotateKey(silent=false){
+  const from=_ks.keyIdx+1;
+  if(_ks.keyIdx>=JBKEYS.length-1){
+    _showAllKeysExhausted();
+    return false;
+  }
+  _ks.keyIdx++;
+  _ksSave();
+  const to=_ks.keyIdx+1;
+  if(!silent)toast(`🔑 APIキーを自動切替しました（キー${from}→${to}）`);
+  setSyncUI('ok',`APIキー切替 ✓（キー${to}使用中）`);
+  _updateSyncKeyBadge();
+  return true;
+}
+
+function _updateSyncKeyBadge(){
+  const el=document.getElementById('syncKeyBadge');
+  if(el)el.textContent=`🔑キー${_ks.keyIdx+1}（今月${_totalCount().toLocaleString()}回）`;
+}
+
+/* ── All keys exhausted ── */
+function _showAllKeysExhausted(){
+  document.getElementById('allKeysBar')?.remove();
+  const n=new Date();
+  const resetDate=new Date(n.getFullYear(),n.getMonth()+1,1);
+  const diffDays=Math.ceil((resetDate-n)/(86400000));
+  const resetStr=`${resetDate.getMonth()+1}月${resetDate.getDate()}日`;
+  const bar=document.createElement('div');
+  bar.id='allKeysBar';
+  bar.style.cssText='position:sticky;top:0;z-index:503;background:#1a0505;border-bottom:2px solid #ef4444;color:#fca5a5;padding:11px 16px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;font-size:.84rem;line-height:1.6;z-index:503';
+  bar.innerHTML=`<span>🚫 <strong>今月の使用量が上限に達しました。</strong><br>来月（${resetStr}、あと${diffDays}日）にリセットされます。</span><button onclick="openKeyStats()" style="background:#7f1d1d;color:#fca5a5;padding:6px 12px;border:1px solid rgba(239,68,68,.5);border-radius:5px;cursor:pointer;font-size:.8rem;flex-shrink:0">使用状況を確認</button>`;
+  const syncBar=document.querySelector('.sync-bar');
+  syncBar?syncBar.insertAdjacentElement('afterend',bar):document.body.prepend(bar);
+  setSyncUI('err','今月の上限に達しました');
+}
+
+/* ── Key stats modal ── */
+function openKeyStats(){
+  const total=_totalCount();
+  const n=new Date();
+  const resetDate=new Date(n.getFullYear(),n.getMonth()+1,1);
+  const diffDays=Math.ceil((resetDate-n)/(86400000));
+  const resetStr=`${resetDate.getMonth()+1}月${resetDate.getDate()}日（あと${diffDays}日）`;
+  let rows='';
+  for(let i=0;i<JBKEYS.length;i++){
+    const cnt=_ks.counts[i]||0;
+    const rem=Math.max(0,KEY_LIMIT-cnt);
+    const pct=Math.min(100,Math.round(cnt/KEY_LIMIT*100));
+    const isCur=i===_ks.keyIdx;
+    const isExh=cnt>=KEY_LIMIT;
+    rows+=`<div style="margin-bottom:10px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:3px">
+        <span style="font-size:.82rem;font-weight:${isCur?'700':'400'};color:${isCur?'var(--accent)':'var(--text2)'}">
+          ${isCur?'▶ ':isExh?'✓ ':' '}キー${i+1}${isCur?' （使用中）':''}
+        </span>
+        <span style="font-size:.75rem;color:var(--text3);font-family:'JetBrains Mono',monospace">${cnt.toLocaleString()} / ${KEY_LIMIT.toLocaleString()}（残り ${rem.toLocaleString()}）</span>
+      </div>
+      <div style="height:5px;background:rgba(255,255,255,.08);border-radius:3px;overflow:hidden">
+        <div style="height:100%;width:${pct}%;background:${isExh?'var(--danger)':isCur?'var(--accent)':'var(--border2)'};border-radius:3px;transition:width .3s"></div>
+      </div>
+    </div>`;
+  }
+  document.getElementById('ksTitle').textContent='🔑 APIキー使用状況';
+  document.getElementById('ksBody').innerHTML=`
+    <div style="margin-bottom:14px;padding:10px 12px;background:var(--surface2);border-radius:var(--rs);border:1px solid var(--border)">
+      <div style="display:flex;justify-content:space-between;font-size:.82rem;margin-bottom:4px">
+        <span style="color:var(--text2)">今月の合計リクエスト</span>
+        <span style="font-family:'JetBrains Mono',monospace;color:var(--text)">${total.toLocaleString()} 回</span>
+      </div>
+      <div style="display:flex;justify-content:space-between;font-size:.82rem;margin-bottom:4px">
+        <span style="color:var(--text2)">使用中のキー</span>
+        <span style="color:var(--accent);font-weight:700">キー${_ks.keyIdx+1}</span>
+      </div>
+      <div style="display:flex;justify-content:space-between;font-size:.82rem">
+        <span style="color:var(--text2)">月リセット日</span>
+        <span style="color:var(--text3)">${resetStr}</span>
+      </div>
+    </div>
+    <div style="font-size:.73rem;font-weight:700;letter-spacing:.1em;color:var(--text3);text-transform:uppercase;margin-bottom:8px">各キーの使用状況</div>
+    ${rows}
+    <div style="font-size:.73rem;color:var(--text3);margin-top:10px;line-height:1.6">5キー合計で最大 <strong style="color:var(--text2)">40,000回/月</strong> 利用可能。月初に全キーが自動リセットされます。</div>
+  `;
+  openModal('keyStatsModal');
+}
+
+/* ── fetchJB: 自動ローテーション対応フェッチ ── */
+async function fetchJB(url,options={}){
+  const key=_getCurrentKey();
+  const headers={...(options.headers||{}),'X-Master-Key':key};
+  _trackRequest();
+  const res=await fetchWithTimeout(url,{...options,headers});
+  if(res.status===403){
+    // 403 → ローテーションして1回再試行
+    const rotated=_rotateKey(false);
+    if(rotated){
+      const key2=_getCurrentKey();
+      const headers2={...(options.headers||{}),'X-Master-Key':key2};
+      _trackRequest();
+      return fetchWithTimeout(url,{...options,headers:headers2});
+    }
+  }
+  return res;
+}
+
+/* ── Fetch with timeout ── */
+async function fetchWithTimeout(url,options={},ms=12000){
+  const timeoutP=new Promise((_,reject)=>setTimeout(()=>reject(new Error('タイムアウト（12秒）')),ms));
   return Promise.race([fetch(url,options),timeoutP]);
 }
 
@@ -543,44 +693,12 @@ function setSyncUI(state,msg,showRetry=false){
   if(retry)retry.style.display=showRetry?'':'none';
 }
 
-/* ── 月間リクエスト数管理 ── */
-function _trackRequest(){
-  try{
-    const now=new Date();
-    const ym=now.getFullYear()+'-'+(now.getMonth()+1);
-    let rec=JSON.parse(localStorage.getItem(LS_REQ_COUNT)||'{}');
-    if(rec.month!==ym)rec={month:ym,count:0};
-    rec.count++;
-    localStorage.setItem(LS_REQ_COUNT,JSON.stringify(rec));
-    if(rec.count===REQ_WARN_LIMIT+1||(rec.count>REQ_WARN_LIMIT&&rec.count%100===1)){
-      _showReqWarning(rec.count);
-    }
-  }catch(e){}
-}
-function _showReqWarning(count){
-  document.getElementById('reqWarnBar')?.remove();
-  const bar=document.createElement('div');
-  bar.id='reqWarnBar';
-  bar.style.cssText='position:sticky;top:0;z-index:501;background:#451a03;border-bottom:2px solid #f59e0b;color:#fde68a;padding:9px 16px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;font-size:.83rem';
-  bar.innerHTML=`<span>⚠️ <strong>月間APIリクエスト数が${count.toLocaleString()}回に達しました。</strong>JSONBinの無料枠(10,000回/月)の上限に近づいています。</span><button onclick="this.parentElement.remove()" style="background:transparent;border:1px solid rgba(253,211,77,.4);color:#fde68a;padding:5px 10px;border-radius:5px;cursor:pointer;font-size:.8rem;flex-shrink:0">閉じる</button>`;
-  const syncBar=document.querySelector('.sync-bar');
-  syncBar?syncBar.insertAdjacentElement('afterend',bar):document.body.prepend(bar);
-}
-
-/* ── LocalStorage cache (fallback + debounce buffer) ── */
-function lsSave(){
-  try{localStorage.setItem(LS_CACHE,JSON.stringify(S))}catch(e){}
-}
+/* ── LocalStorage cache ── */
+function lsSave(){try{localStorage.setItem(LS_CACHE,JSON.stringify(S))}catch(e){}}
 function lsLoad(){
-  try{
-    const r=localStorage.getItem(LS_CACHE);
-    if(r){const d=JSON.parse(r);S={...S,...d};S.cards=(S.cards||[]).map(nc);S.done=(S.done||[]).map(nc)}
-  }catch(e){}
+  try{const r=localStorage.getItem(LS_CACHE);if(r){const d=JSON.parse(r);S={...S,...d};S.cards=(S.cards||[]).map(nc);S.done=(S.done||[]).map(nc)}}catch(e){}
 }
-function lsBackup(){
-  // エラー時バックアップ保存
-  try{localStorage.setItem(LS_BACKUP,JSON.stringify({data:S,savedAt:Date.now()}))}catch(e){}
-}
+function lsBackup(){try{localStorage.setItem(LS_BACKUP,JSON.stringify({data:S,savedAt:Date.now()}))}catch(e){}}
 
 /* ── Apply loaded data ── */
 function applyData(d){
@@ -590,146 +708,101 @@ function applyData(d){
   S.tagColors=d.tagColors||{};
   S.routHist=d.routHist||[];
   S.sortedByDue=!!d.sortedByDue;
-  _localVersion=Number(d.version)||0; // A案：バージョンを記録
+  _localVersion=Number(d.version)||0;
 }
 
-/* ── Sync dirty data on reconnect ── */
+/* ── Save (debounced 3s) ── */
 function save(){
-  if(_isLoading)return; // ①読込中は保存しない
+  if(_isLoading)return;
   lsSave();
   localStorage.setItem(LS_DIRTY,'1');
   if(!_online){setSyncUI('off','オフライン（ローカル保存済み）');return}
   clearTimeout(_saveTimer);
-  _saveTimer=setTimeout(()=>cloudSave(),3000); // デバウンス：最後の操作から3秒後に1回
+  _saveTimer=setTimeout(()=>cloudSave(),3000);
 }
 
+/* ── Cloud Save ── */
 async function cloudSave(){
   if(_saving)return;
   _saving=true;
   setSyncUI('saving','保存中…');
   try{
-    // ─── A案①：保存前にBINのバージョンを確認 ───
     try{
-      _trackRequest();
-      const chk=await fetchWithTimeout(`${JBBASE}/${BIN_ID}/latest`,{headers:{'X-Master-Key':JBKEY}});
+      const chk=await fetchJB(`${JBBASE}/${BIN_ID}/latest`);
       if(chk.ok){
         const chkJson=await chk.json();
         const remoteVer=Number((chkJson.record||chkJson).version)||0;
         if(remoteVer!==_localVersion){
-          // A案②③：競合検知 → 退避 → 警告表示
-          _saving=false;
-          lsSave();
+          _saving=false;lsSave();
           try{localStorage.setItem(LS_STASH,localStorage.getItem(LS_CACHE));}catch(_){}
-          showConflictWarning();
-          return;
+          showConflictWarning();return;
         }
       }else if(chk.status===403){
-        _saving=false;
-        _show403Warning();
-        setSyncUI('err','APIキーエラー (403)');
-        return;
+        _saving=false;setSyncUI('err','全キー使用済み (403)');return;
       }
-    }catch(chkErr){
-      // バージョンチェック失敗（ネットワーク瞬断等）→ ログのみ、保存は続行
-      console.warn('Version check skipped:',chkErr.message);
-    }
-    // バージョン一致 → バージョン+1して保存
+    }catch(chkErr){console.warn('Version check skipped:',chkErr.message)}
     S.version=_localVersion+1;
-    _trackRequest();
-    const res=await fetchWithTimeout(`${JBBASE}/${BIN_ID}`,{
-      method:'PUT',
-      headers:{'Content-Type':'application/json','X-Master-Key':JBKEY},
-      body:JSON.stringify(S)
-    });
-    if(res.status===403){_show403Warning();throw new Error('HTTP 403 Forbidden');}
+    const res=await fetchJB(`${JBBASE}/${BIN_ID}`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(S)});
+    if(res.status===403){setSyncUI('err','全キー使用済み (403)');throw new Error('HTTP 403')}
     if(!res.ok)throw new Error('HTTP '+res.status);
-    _localVersion=S.version; // 保存成功後にローカルバージョンを更新
+    _localVersion=S.version;
     lsSave();localStorage.removeItem(LS_DIRTY);
-    setSyncUI('ok','クラウド保存済み ✓ (v'+_localVersion+')');
+    setSyncUI('ok',`クラウド保存済み ✓ (v${_localVersion})`);
   }catch(e){
-    lsBackup(); // エラー時はLocalStorageにバックアップ
+    lsBackup();
     setSyncUI('err','保存失敗: '+e.message,true);
     if(!e.message.includes('403'))toast('⚠️ クラウド保存に失敗しました（バックアップ保存済み）');
   }finally{_saving=false}
 }
 
-/* ── Load from BIN ── */
+/* ── Cloud Load ── */
 async function cloudLoad(isManual=false){
-  _isLoading=true; // ①読込開始 — 保存をブロック
-  if(!_online){
-    lsLoad();
-    _isLoading=false;
-    setSyncUI('off','オフライン（キャッシュから読込）');
-    render();return;
-  }
+  _isLoading=true;
+  if(!_online){lsLoad();_isLoading=false;setSyncUI('off','オフライン（キャッシュから読込）');render();return}
   setSyncUI('saving','データを読込中…');
   try{
     let res;
-    _trackRequest();
     try{
-      res=await fetchWithTimeout(`${JBBASE}/${BIN_ID}/latest`,{headers:{'X-Master-Key':JBKEY}});
+      res=await fetchJB(`${JBBASE}/${BIN_ID}/latest`);
     }catch(e){
-      // ネットワークエラー → 2秒後に1回リトライ
       setSyncUI('saving','再試行中…');
       await new Promise(r=>setTimeout(r,2000));
-      _trackRequest();
-      res=await fetchWithTimeout(`${JBBASE}/${BIN_ID}/latest`,{headers:{'X-Master-Key':JBKEY}});
+      res=await fetchJB(`${JBBASE}/${BIN_ID}/latest`);
     }
-    if(res.status===403){_show403Warning();throw new Error('HTTP 403 Forbidden');}
+    if(res.status===403){setSyncUI('err','全キー使用済み (403)');throw new Error('HTTP 403')}
     if(!res.ok)throw new Error('HTTP '+res.status);
     const json=await res.json();
     const data=json.record||json;
-    // BINのデータを最優先で使用（空でもそのまま適用）
     if(data&&typeof data==='object'){
-      // バージョンが同じ場合はデータ取得スキップ
       const remoteVer=Number(data.version)||0;
-      if(!isManual && remoteVer>0 && remoteVer===_localVersion){
-        _lastSyncTime=Date.now();
-        _isLoading=false;
-        setSyncUI('ok','同期済み（スキップ） ✓ (v'+_localVersion+')');
-        return;
+      if(!isManual&&remoteVer>0&&remoteVer===_localVersion){
+        _lastSyncTime=Date.now();_isLoading=false;
+        setSyncUI('ok',`同期済み（スキップ） ✓ (v${_localVersion})`);return;
       }
-      applyData(data);
-      lsSave();localStorage.removeItem(LS_DIRTY);
+      applyData(data);lsSave();localStorage.removeItem(LS_DIRTY);
     }
-    pruneHistory(); // ⑥当月外の履歴を削除
+    pruneHistory();
     _lastSyncTime=Date.now();
-    render(); // ★ render()→save()をブロックするため_isLoading=falseは後で
-    _isLoading=false; // ①読込完了 — render()の後でfalseに
+    render();_isLoading=false;
     setSyncUI('ok','読込完了 ✓'+(isManual?' （手動更新）':''));
   }catch(e){
-    // エラー時はキャッシュを使用（BINデータは上書きしない）
-    lsLoad();
-    lsBackup(); // エラー時バックアップ保存
-    pruneHistory();
-    _lastSyncTime=Date.now();  // ★再トリガー防止
-    _lastSyncError=Date.now(); // ★クールダウン開始
-    render(); // ★ _isLoading=falseより先にrender → save()をブロック
-    _isLoading=false; // render()の後でfalseに
-    const errMsg=e.message||'不明なエラー';
+    lsLoad();lsBackup();pruneHistory();
+    _lastSyncTime=Date.now();_lastSyncError=Date.now();
+    render();_isLoading=false;
     if(!e.message.includes('403'))setSyncUI('err','読込失敗（キャッシュ使用中）',true);
-    if(_online&&isManual&&!e.message.includes('403'))toast('⚠️ BIN読込失敗: '+errMsg); // 手動時のみtoast
+    if(_online&&isManual&&!e.message.includes('403'))toast('⚠️ BIN読込失敗: '+e.message);
   }
 }
 
-/* ── Online / offline events （追加対策②） ── */
+/* ── Online / offline events ── */
 window.addEventListener('online',()=>{
   _online=true;
   if(localStorage.getItem(LS_DIRTY)){
     setSyncUI('saving','オンライン復帰 — バージョン確認中…');
-    // 追加対策②：復帰時もバージョン確認を実施（競合があれば警告）
-    cloudSave().then(()=>{
-      if(!document.getElementById('conflictBar'))
-        toast('☁️ オフライン中の変更を同期しました');
-    }).catch(()=>setSyncUI('err','同期失敗',true));
+    cloudSave().then(()=>{if(!document.getElementById('conflictBar'))toast('☁️ オフライン中の変更を同期しました')}).catch(()=>setSyncUI('err','同期失敗',true));
   }else{setSyncUI('ok','オンライン')}
 });
-window.addEventListener('offline',()=>{
-  _online=false;
-  setSyncUI('off','オフライン — ローカル保存中');
-  toast('📴 オフラインです。変更はローカルに保存されます');
-});
-
+window.addEventListener('offline',()=>{_online=false;setSyncUI('off','オフライン — ローカル保存中');toast('📴 オフラインです。変更はローカルに保存されます')});
 
 /* ══════════════════════════════════════════
    A案：競合警告・退避データ復元
@@ -740,33 +813,19 @@ function showConflictWarning(){
   const bar=document.createElement('div');
   bar.id='conflictBar';
   bar.style.cssText='position:sticky;top:0;z-index:500;background:#451a03;border-bottom:2px solid #92400e;color:#fde68a;padding:11px 16px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;font-size:.84rem;line-height:1.5';
-  bar.innerHTML=`
-    <span>⚠️ <strong>他の端末でデータが更新されています。</strong><br>
-    最新データを読み込んでから再度保存してください。<br>
-    <small style="opacity:.8">※入力中の内容は一時保存されています</small></span>
-    <button onclick="resolveConflict()" style="background:#d97706;color:#fff;padding:9px 16px;border:none;border-radius:6px;cursor:pointer;font-size:.84rem;font-weight:600;white-space:nowrap;flex-shrink:0">
-      最新データを読み込む
-    </button>`;
+  bar.innerHTML=`<span>⚠️ <strong>他の端末でデータが更新されています。</strong><br>最新データを読み込んでから再度保存してください。<br><small style="opacity:.8">※入力中の内容は一時保存されています</small></span><button onclick="resolveConflict()" style="background:#d97706;color:#fff;padding:9px 16px;border:none;border-radius:6px;cursor:pointer;font-size:.84rem;font-weight:600;white-space:nowrap;flex-shrink:0">最新データを読み込む</button>`;
   const syncBar=document.querySelector('.sync-bar');
   syncBar?syncBar.insertAdjacentElement('afterend',bar):document.body.prepend(bar);
 }
 
 async function resolveConflict(){
   document.getElementById('conflictBar')?.remove();
-  await cloudLoad(false); // 最新BINデータを読込
-  // 退避データがあれば復元オプションを表示
+  await cloudLoad(false);
   if(localStorage.getItem(LS_STASH)){
     const bar=document.createElement('div');
     bar.id='restoreBar';
     bar.style.cssText='position:sticky;top:0;z-index:500;background:#0c1a2e;border-bottom:2px solid #1d4ed8;color:#93c5fd;padding:10px 16px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;font-size:.83rem';
-    bar.innerHTML=`
-      <span>💾 <strong>一時保存したデータがあります。</strong>内容を確認して再保存できます。</span>
-      <button onclick="restoreStash()" style="background:#1d4ed8;color:#fff;padding:7px 14px;border:none;border-radius:6px;cursor:pointer;font-size:.82rem;white-space:nowrap">
-        内容を復元して再編集
-      </button>
-      <button onclick="discardStash()" style="background:transparent;border:1px solid rgba(147,197,253,.4);color:#93c5fd;padding:7px 12px;border-radius:6px;cursor:pointer;font-size:.82rem;white-space:nowrap">
-        破棄する
-      </button>`;
+    bar.innerHTML=`<span>💾 <strong>一時保存したデータがあります。</strong>内容を確認して再保存できます。</span><button onclick="restoreStash()" style="background:#1d4ed8;color:#fff;padding:7px 14px;border:none;border-radius:6px;cursor:pointer;font-size:.82rem;white-space:nowrap">内容を復元して再編集</button><button onclick="discardStash()" style="background:transparent;border:1px solid rgba(147,197,253,.4);color:#93c5fd;padding:7px 12px;border-radius:6px;cursor:pointer;font-size:.82rem;white-space:nowrap">破棄する</button>`;
     const syncBar=document.querySelector('.sync-bar');
     syncBar?syncBar.insertAdjacentElement('afterend',bar):document.body.prepend(bar);
   }
@@ -774,41 +833,15 @@ async function resolveConflict(){
 
 function restoreStash(){
   try{
-    const raw=localStorage.getItem(LS_STASH);
-    if(!raw)return;
+    const raw=localStorage.getItem(LS_STASH);if(!raw)return;
     const d=JSON.parse(raw);
-    // ★ループ防止: 最新BINのバージョンを保持したまま内容だけ復元
-    const currentVer=_localVersion; // cloudLoadで更新済みの最新版を記憶
-    applyData(d);
-    _localVersion=currentVer; // 古い退避データのversionで上書きされるのを防ぐ
-    S.version=currentVer;    // 保存時に currentVer+1 が使われるよう統一
-    render();
-    document.getElementById('restoreBar')?.remove();
-    localStorage.removeItem(LS_STASH);
+    const currentVer=_localVersion;
+    applyData(d);_localVersion=currentVer;S.version=currentVer;
+    render();document.getElementById('restoreBar')?.remove();localStorage.removeItem(LS_STASH);
     toast('💾 退避データを復元しました。内容を確認後、保存してください。');
-  }catch(e){document.getElementById('restoreBar')?.remove();}
+  }catch(e){document.getElementById('restoreBar')?.remove()}
 }
-
-function discardStash(){
-  localStorage.removeItem(LS_STASH);
-  document.getElementById('restoreBar')?.remove();
-  toast('🗑 一時保存データを破棄しました');
-}
-
-/* ══════════════════════════════════════════
-   403エラー：APIキー更新案内
-   ══════════════════════════════════════════ */
-function _show403Warning(){
-  document.getElementById('apiKeyWarnBar')?.remove();
-  const bar=document.createElement('div');
-  bar.id='apiKeyWarnBar';
-  bar.style.cssText='position:sticky;top:0;z-index:502;background:#1e1b4b;border-bottom:2px solid #6366f1;color:#c7d2fe;padding:11px 16px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;font-size:.84rem;line-height:1.5';
-  bar.innerHTML=`<span>🔑 <strong>APIキーの認証に失敗しました（403）。</strong><br>JSONBinのAPIキーを更新してください。有効なキーに変更後、ページを再読み込みしてください。</span><button onclick="this.parentElement.remove()" style="background:transparent;border:1px solid rgba(199,210,254,.4);color:#c7d2fe;padding:6px 12px;border-radius:5px;cursor:pointer;font-size:.8rem;flex-shrink:0">閉じる</button>`;
-  const syncBar=document.querySelector('.sync-bar');
-  syncBar?syncBar.insertAdjacentElement('afterend',bar):document.body.prepend(bar);
-  setSyncUI('err','APIキーを更新してください (403)');
-  toast('🔑 APIキーを更新してください（403 Forbidden）');
-}
+function discardStash(){localStorage.removeItem(LS_STASH);document.getElementById('restoreBar')?.remove();toast('🗑 一時保存データを破棄しました')}
 
 /* ══════════════════════════════════════════
    追加対策①：タブフォーカス時の自動同期
@@ -1752,8 +1785,10 @@ function toast(msg){
 
 document.addEventListener('keydown',e=>{if(e.key==='Escape')document.querySelectorAll('.mover.vis').forEach(m=>closeModal(m.id))});
 
+_initKeyState(); // APIキーローテーション：月チェック＆初期化
 load(); // migrate legacy data if present
 pruneHistory(); // ⑥当月外の履歴を削除
+_updateSyncKeyBadge(); // sync-bar にキー番号バッジ表示
 cloudLoad(); // fetch from cloud (or LS cache if offline)
 </script>
 </body>
