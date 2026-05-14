@@ -501,12 +501,15 @@ function gid(){return Date.now().toString(36)+Math.random().toString(36).slice(2
 // ─────────────────────────────────────────────
 // CLOUD SYNC — JSONBin.io
 // ─────────────────────────────────────────────
-const JBKEY='$2a$10$Wl2JnLVl9bRo.H58Efb22.MjgvquQR.8XhUKvOUBh42NE6eiTDR7S';
+const JBKEY='$2a$10$9dqlPrIfdQVZQiQ2L1.72.3eLk3RxRAdoNyxPW2UcgEZ7d0k8wjk.';
 const JBBASE='https://api.jsonbin.io/v3/b';
 const BIN_ID='69f96d08aaba882197712a9b'; // 固定BIN ID
 const LS_DIRTY='tb3_dirty';
 const LS_CACHE='tb3_cache';
 const LS_STASH='tb3_stash'; // A案：競合時の退避キー
+const LS_BACKUP='tb3_backup'; // エラー時バックアップ
+const LS_REQ_COUNT='tb3_req_count'; // 月間リクエスト数管理
+const REQ_WARN_LIMIT=8000; // 警告しきい値
 
 let _saveTimer=null;
 let _saving=false;
@@ -516,7 +519,7 @@ let _online=navigator.onLine;
 let _localVersion=0;       // A案：読込時のBINバージョンを記録
 let _lastSyncTime=0;       // 追加対策①：タブフォーカス同期スロットル
 let _lastSyncError=0;      // エラー後のクールダウン管理
-const _SYNC_THROTTLE=30000;// 追加対策①：再同期の最小間隔(ms)
+const _SYNC_THROTTLE=300000;// タブフォーカス同期の最小間隔(ms) — 5分
 const _ERROR_COOLDOWN=60000;// エラー後の再試行クールダウン(ms)
 
 
@@ -540,6 +543,30 @@ function setSyncUI(state,msg,showRetry=false){
   if(retry)retry.style.display=showRetry?'':'none';
 }
 
+/* ── 月間リクエスト数管理 ── */
+function _trackRequest(){
+  try{
+    const now=new Date();
+    const ym=now.getFullYear()+'-'+(now.getMonth()+1);
+    let rec=JSON.parse(localStorage.getItem(LS_REQ_COUNT)||'{}');
+    if(rec.month!==ym)rec={month:ym,count:0};
+    rec.count++;
+    localStorage.setItem(LS_REQ_COUNT,JSON.stringify(rec));
+    if(rec.count===REQ_WARN_LIMIT+1||(rec.count>REQ_WARN_LIMIT&&rec.count%100===1)){
+      _showReqWarning(rec.count);
+    }
+  }catch(e){}
+}
+function _showReqWarning(count){
+  document.getElementById('reqWarnBar')?.remove();
+  const bar=document.createElement('div');
+  bar.id='reqWarnBar';
+  bar.style.cssText='position:sticky;top:0;z-index:501;background:#451a03;border-bottom:2px solid #f59e0b;color:#fde68a;padding:9px 16px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;font-size:.83rem';
+  bar.innerHTML=`<span>⚠️ <strong>月間APIリクエスト数が${count.toLocaleString()}回に達しました。</strong>JSONBinの無料枠(10,000回/月)の上限に近づいています。</span><button onclick="this.parentElement.remove()" style="background:transparent;border:1px solid rgba(253,211,77,.4);color:#fde68a;padding:5px 10px;border-radius:5px;cursor:pointer;font-size:.8rem;flex-shrink:0">閉じる</button>`;
+  const syncBar=document.querySelector('.sync-bar');
+  syncBar?syncBar.insertAdjacentElement('afterend',bar):document.body.prepend(bar);
+}
+
 /* ── LocalStorage cache (fallback + debounce buffer) ── */
 function lsSave(){
   try{localStorage.setItem(LS_CACHE,JSON.stringify(S))}catch(e){}
@@ -549,6 +576,10 @@ function lsLoad(){
     const r=localStorage.getItem(LS_CACHE);
     if(r){const d=JSON.parse(r);S={...S,...d};S.cards=(S.cards||[]).map(nc);S.done=(S.done||[]).map(nc)}
   }catch(e){}
+}
+function lsBackup(){
+  // エラー時バックアップ保存
+  try{localStorage.setItem(LS_BACKUP,JSON.stringify({data:S,savedAt:Date.now()}))}catch(e){}
 }
 
 /* ── Apply loaded data ── */
@@ -569,7 +600,7 @@ function save(){
   localStorage.setItem(LS_DIRTY,'1');
   if(!_online){setSyncUI('off','オフライン（ローカル保存済み）');return}
   clearTimeout(_saveTimer);
-  _saveTimer=setTimeout(()=>cloudSave(),800);
+  _saveTimer=setTimeout(()=>cloudSave(),3000); // デバウンス：最後の操作から3秒後に1回
 }
 
 async function cloudSave(){
@@ -579,6 +610,7 @@ async function cloudSave(){
   try{
     // ─── A案①：保存前にBINのバージョンを確認 ───
     try{
+      _trackRequest();
       const chk=await fetchWithTimeout(`${JBBASE}/${BIN_ID}/latest`,{headers:{'X-Master-Key':JBKEY}});
       if(chk.ok){
         const chkJson=await chk.json();
@@ -591,6 +623,11 @@ async function cloudSave(){
           showConflictWarning();
           return;
         }
+      }else if(chk.status===403){
+        _saving=false;
+        _show403Warning();
+        setSyncUI('err','APIキーエラー (403)');
+        return;
       }
     }catch(chkErr){
       // バージョンチェック失敗（ネットワーク瞬断等）→ ログのみ、保存は続行
@@ -598,18 +635,21 @@ async function cloudSave(){
     }
     // バージョン一致 → バージョン+1して保存
     S.version=_localVersion+1;
+    _trackRequest();
     const res=await fetchWithTimeout(`${JBBASE}/${BIN_ID}`,{
       method:'PUT',
       headers:{'Content-Type':'application/json','X-Master-Key':JBKEY},
       body:JSON.stringify(S)
     });
+    if(res.status===403){_show403Warning();throw new Error('HTTP 403 Forbidden');}
     if(!res.ok)throw new Error('HTTP '+res.status);
     _localVersion=S.version; // 保存成功後にローカルバージョンを更新
     lsSave();localStorage.removeItem(LS_DIRTY);
     setSyncUI('ok','クラウド保存済み ✓ (v'+_localVersion+')');
   }catch(e){
+    lsBackup(); // エラー時はLocalStorageにバックアップ
     setSyncUI('err','保存失敗: '+e.message,true);
-    toast('⚠️ クラウド保存に失敗しました');
+    if(!e.message.includes('403'))toast('⚠️ クラウド保存に失敗しました（バックアップ保存済み）');
   }finally{_saving=false}
 }
 
@@ -625,19 +665,30 @@ async function cloudLoad(isManual=false){
   setSyncUI('saving','データを読込中…');
   try{
     let res;
+    _trackRequest();
     try{
       res=await fetchWithTimeout(`${JBBASE}/${BIN_ID}/latest`,{headers:{'X-Master-Key':JBKEY}});
     }catch(e){
       // ネットワークエラー → 2秒後に1回リトライ
       setSyncUI('saving','再試行中…');
       await new Promise(r=>setTimeout(r,2000));
+      _trackRequest();
       res=await fetchWithTimeout(`${JBBASE}/${BIN_ID}/latest`,{headers:{'X-Master-Key':JBKEY}});
     }
+    if(res.status===403){_show403Warning();throw new Error('HTTP 403 Forbidden');}
     if(!res.ok)throw new Error('HTTP '+res.status);
     const json=await res.json();
     const data=json.record||json;
     // BINのデータを最優先で使用（空でもそのまま適用）
     if(data&&typeof data==='object'){
+      // バージョンが同じ場合はデータ取得スキップ
+      const remoteVer=Number(data.version)||0;
+      if(!isManual && remoteVer>0 && remoteVer===_localVersion){
+        _lastSyncTime=Date.now();
+        _isLoading=false;
+        setSyncUI('ok','同期済み（スキップ） ✓ (v'+_localVersion+')');
+        return;
+      }
       applyData(data);
       lsSave();localStorage.removeItem(LS_DIRTY);
     }
@@ -649,14 +700,15 @@ async function cloudLoad(isManual=false){
   }catch(e){
     // エラー時はキャッシュを使用（BINデータは上書きしない）
     lsLoad();
+    lsBackup(); // エラー時バックアップ保存
     pruneHistory();
     _lastSyncTime=Date.now();  // ★再トリガー防止
     _lastSyncError=Date.now(); // ★クールダウン開始
     render(); // ★ _isLoading=falseより先にrender → save()をブロック
     _isLoading=false; // render()の後でfalseに
     const errMsg=e.message||'不明なエラー';
-    setSyncUI('err','読込失敗（キャッシュ使用中）',true);
-    if(_online&&isManual)toast('⚠️ BIN読込失敗: '+errMsg); // 手動時のみtoast
+    if(!e.message.includes('403'))setSyncUI('err','読込失敗（キャッシュ使用中）',true);
+    if(_online&&isManual&&!e.message.includes('403'))toast('⚠️ BIN読込失敗: '+errMsg); // 手動時のみtoast
   }
 }
 
@@ -744,6 +796,21 @@ function discardStash(){
 }
 
 /* ══════════════════════════════════════════
+   403エラー：APIキー更新案内
+   ══════════════════════════════════════════ */
+function _show403Warning(){
+  document.getElementById('apiKeyWarnBar')?.remove();
+  const bar=document.createElement('div');
+  bar.id='apiKeyWarnBar';
+  bar.style.cssText='position:sticky;top:0;z-index:502;background:#1e1b4b;border-bottom:2px solid #6366f1;color:#c7d2fe;padding:11px 16px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;font-size:.84rem;line-height:1.5';
+  bar.innerHTML=`<span>🔑 <strong>APIキーの認証に失敗しました（403）。</strong><br>JSONBinのAPIキーを更新してください。有効なキーに変更後、ページを再読み込みしてください。</span><button onclick="this.parentElement.remove()" style="background:transparent;border:1px solid rgba(199,210,254,.4);color:#c7d2fe;padding:6px 12px;border-radius:5px;cursor:pointer;font-size:.8rem;flex-shrink:0">閉じる</button>`;
+  const syncBar=document.querySelector('.sync-bar');
+  syncBar?syncBar.insertAdjacentElement('afterend',bar):document.body.prepend(bar);
+  setSyncUI('err','APIキーを更新してください (403)');
+  toast('🔑 APIキーを更新してください（403 Forbidden）');
+}
+
+/* ══════════════════════════════════════════
    追加対策①：タブフォーカス時の自動同期
    ══════════════════════════════════════════ */
 function _isEditingForm(){
@@ -757,7 +824,7 @@ function _tabFocusSync(){
   if(_isEditingForm())return;                           // 入力中はスキップ
   if(localStorage.getItem(LS_DIRTY))return;             // 未保存変更あり → スキップ
   if(Date.now()-_lastSyncError<_ERROR_COOLDOWN)return;  // ★エラー後1分はスキップ
-  if(Date.now()-_lastSyncTime<_SYNC_THROTTLE)return;    // スロットル（30秒）
+  if(Date.now()-_lastSyncTime<_SYNC_THROTTLE)return;    // スロットル（5分）
   _lastSyncTime=Date.now();
   setSyncUI('saving','同期中…');
   cloudLoad(false).catch(()=>{});
