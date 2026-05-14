@@ -338,6 +338,7 @@ body{font-family:'Noto Sans JP',sans-serif;background:var(--bg);color:var(--text
   <button class="sync-retry" id="syncRetryBtn" style="display:none" onclick="cloudLoad(true)">↺ 再試行</button>
   <button class="sync-retry" onclick="openKeyStats()" title="APIキー使用状況" style="margin-left:4px">🔑 キー使用状況</button>
   <span id="syncKeyBadge" style="font-size:.65rem;color:var(--text3);margin-left:4px"></span>
+  <span id="syncDiagHint" style="display:none;font-size:.65rem;color:var(--text3);margin-left:4px">（コンソールで <code>tbDiag()</code> を実行すると詳細確認できます）</span>
 </div>
 
 <div class="fbar">
@@ -558,7 +559,41 @@ function _initKeyState(){
     _ksSave();
     if(old)setTimeout(()=>toast('🔄 月が変わりました。APIキーをキー①からリスタートします'),800);
   }
+  // 起動時診断ログ
+  console.group('[TaskBoard] 起動設定確認');
+  console.log('  BIN_ID   :', BIN_ID);
+  console.log('  エンドURL:', `https://api.jsonbin.io/v3/b/${BIN_ID}/latest`);
+  console.log('  キー数   :', JBKEYS.length);
+  console.log('  使用キー :', _ks.keyIdx+1, '/', JBKEYS.length);
+  console.log('  キー先頭 :', _getCurrentKey().slice(0,20)+'...');
+  console.log('  今月回数 :', _totalCount(), '/ '+KEY_LIMIT*JBKEYS.length);
+  console.groupEnd();
 }
+
+/* ── ブラウザコンソールから呼べる診断関数 ── */
+window.tbDiag=async function(){
+  const url=`https://api.jsonbin.io/v3/b/${BIN_ID}/latest`;
+  console.group('[tbDiag] JSONBin 接続テスト');
+  console.log('URL:', url);
+  console.log('キー番号:', _ks.keyIdx+1, '| 先頭:', _getCurrentKey().slice(0,20)+'...');
+  try{
+    const res=await fetch(url,{headers:{'X-Master-Key':_getCurrentKey()}});
+    console.log('HTTP Status:', res.status, res.statusText);
+    if(res.ok){
+      const json=await res.json();
+      const data=json.record||json;
+      console.log('✅ 接続成功！バージョン:', data.version, '| カード数:', (data.cards||[]).length);
+    }else{
+      console.error('❌ HTTP '+res.status);
+      if(res.status===401||res.status===403) console.error('  → APIキーを確認してください');
+      if(res.status===404) console.error('  → BIN IDを確認してください。BIN_ID='+BIN_ID);
+    }
+  }catch(e){
+    console.error('❌ 通信エラー:', e.message);
+    console.error('  → ネットワーク接続・CORS設定を確認してください');
+  }
+  console.groupEnd();
+};
 
 function _getCurrentKey(){return JBKEYS[_ks.keyIdx>=0&&_ks.keyIdx<JBKEYS.length?_ks.keyIdx:0]}
 function _totalCount(){return(_ks.counts||[]).reduce((a,b)=>a+b,0)}
@@ -659,17 +694,38 @@ function openKeyStats(){
 /* ── fetchJB: 自動ローテーション対応フェッチ ── */
 async function fetchJB(url,options={}){
   const key=_getCurrentKey();
+  const keyNo=_ks.keyIdx+1;
+  // X-Master-Key はヘッダーに注入。Content-Type は PUT 時のみ options 側で渡す
   const headers={...(options.headers||{}),'X-Master-Key':key};
+  console.debug(`[JB] fetchJB キー${keyNo} → ${options.method||'GET'} ${url}`);
+  let res;
+  try{
+    res=await fetchWithTimeout(url,{...options,headers});
+  }catch(netErr){
+    console.error(`[JB] ネットワークエラー (キー${keyNo}):`,netErr.message);
+    throw new Error('通信エラー: '+netErr.message);
+  }
+  console.debug(`[JB] レスポンス: HTTP ${res.status} (キー${keyNo})`);
+  // カウントは成功・失敗問わずリクエスト消化として記録
   _trackRequest();
-  const res=await fetchWithTimeout(url,{...options,headers});
   if(res.status===403){
-    // 403 → ローテーションして1回再試行
+    console.warn(`[JB] 403 Forbidden (キー${keyNo}) → 次のキーへローテーション`);
     const rotated=_rotateKey(false);
     if(rotated){
       const key2=_getCurrentKey();
+      const keyNo2=_ks.keyIdx+1;
       const headers2={...(options.headers||{}),'X-Master-Key':key2};
+      console.debug(`[JB] 再試行 キー${keyNo2} → ${options.method||'GET'} ${url}`);
+      let res2;
+      try{
+        res2=await fetchWithTimeout(url,{...options,headers:headers2});
+      }catch(netErr2){
+        console.error(`[JB] 再試行ネットワークエラー (キー${keyNo2}):`,netErr2.message);
+        throw new Error('通信エラー（再試行）: '+netErr2.message);
+      }
       _trackRequest();
-      return fetchWithTimeout(url,{...options,headers:headers2});
+      console.debug(`[JB] 再試行レスポンス: HTTP ${res2.status} (キー${keyNo2})`);
+      return res2;
     }
   }
   return res;
@@ -687,10 +743,12 @@ function setSyncUI(state,msg,showRetry=false){
   const msgEl=document.getElementById('syncMsg');
   const idEl=document.getElementById('syncId');
   const retry=document.getElementById('syncRetryBtn');
+  const diagHint=document.getElementById('syncDiagHint');
   if(dot)dot.className='sync-dot '+state;
   if(msgEl)msgEl.textContent=msg;
   if(idEl)idEl.textContent='BIN: '+BIN_ID.slice(-8);
   if(retry)retry.style.display=showRetry?'':'none';
+  if(diagHint)diagHint.style.display=(state==='err')?'inline':'none';
 }
 
 /* ── LocalStorage cache ── */
@@ -727,6 +785,7 @@ async function cloudSave(){
   _saving=true;
   setSyncUI('saving','保存中…');
   try{
+    // ── バージョン確認 ─────────────────────────────────
     try{
       const chk=await fetchJB(`${JBBASE}/${BIN_ID}/latest`);
       if(chk.ok){
@@ -738,59 +797,139 @@ async function cloudSave(){
           showConflictWarning();return;
         }
       }else if(chk.status===403){
-        _saving=false;setSyncUI('err','全キー使用済み (403)');return;
+        console.error('[JB] cloudSave: バージョン確認で 403。APIキーを確認してください。BIN_ID:',BIN_ID);
+        _saving=false;setSyncUI('err','APIキーを確認してください (403)');return;
+      }else if(chk.status===404){
+        console.error('[JB] cloudSave: BIN IDが見つかりません (404)。BIN_ID:',BIN_ID);
+        _saving=false;setSyncUI('err','BIN IDを確認してください (404)');return;
       }
-    }catch(chkErr){console.warn('Version check skipped:',chkErr.message)}
+    }catch(chkErr){
+      console.warn('[JB] バージョン確認スキップ（ネットワーク瞬断等）:',chkErr.message);
+    }
+    // ── PUT 保存 ───────────────────────────────────────
     S.version=_localVersion+1;
-    const res=await fetchJB(`${JBBASE}/${BIN_ID}`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(S)});
-    if(res.status===403){setSyncUI('err','全キー使用済み (403)');throw new Error('HTTP 403')}
-    if(!res.ok)throw new Error('HTTP '+res.status);
+    const res=await fetchJB(`${JBBASE}/${BIN_ID}`,{
+      method:'PUT',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify(S)
+    });
+    if(!res.ok){
+      const status=res.status;
+      let errMsg;
+      if(status===403)      errMsg='APIキーを確認してください (403)';
+      else if(status===404) errMsg='BIN IDを確認してください (404)';
+      else                  errMsg=`保存失敗 HTTP ${status}`;
+      console.error('[JB] cloudSave 失敗:', errMsg, '| BIN_ID:', BIN_ID);
+      throw new Error(errMsg);
+    }
     _localVersion=S.version;
     lsSave();localStorage.removeItem(LS_DIRTY);
+    console.log(`[JB] cloudSave 成功: v${_localVersion}、カード ${S.cards.length} 件`);
     setSyncUI('ok',`クラウド保存済み ✓ (v${_localVersion})`);
   }catch(e){
     lsBackup();
-    setSyncUI('err','保存失敗: '+e.message,true);
-    if(!e.message.includes('403'))toast('⚠️ クラウド保存に失敗しました（バックアップ保存済み）');
+    const msg=e.message||'不明なエラー';
+    setSyncUI('err','保存失敗: '+msg,true);
+    if(!msg.includes('403')&&!msg.includes('404'))
+      toast('⚠️ クラウド保存に失敗しました（バックアップ保存済み）');
   }finally{_saving=false}
 }
 
 /* ── Cloud Load ── */
 async function cloudLoad(isManual=false){
   _isLoading=true;
-  if(!_online){lsLoad();_isLoading=false;setSyncUI('off','オフライン（キャッシュから読込）');render();return}
+  if(!_online){
+    lsLoad();_isLoading=false;
+    setSyncUI('off','オフライン（キャッシュから読込）');
+    render();return;
+  }
   setSyncUI('saving','データを読込中…');
+  const loadUrl=`${JBBASE}/${BIN_ID}/latest`;
+  console.group('[JB] cloudLoad 開始');
+  console.log('  URL    :', loadUrl);
+  console.log('  BIN_ID :', BIN_ID);
+  console.log('  キー番号:', _ks.keyIdx+1, '/', JBKEYS.length);
+  console.log('  isManual:', isManual);
   try{
     let res;
     try{
-      res=await fetchJB(`${JBBASE}/${BIN_ID}/latest`);
-    }catch(e){
+      res=await fetchJB(loadUrl);
+    }catch(firstErr){
+      console.warn('[JB] 初回失敗、2秒後に再試行:', firstErr.message);
       setSyncUI('saving','再試行中…');
       await new Promise(r=>setTimeout(r,2000));
-      res=await fetchJB(`${JBBASE}/${BIN_ID}/latest`);
+      res=await fetchJB(loadUrl);
     }
-    if(res.status===403){setSyncUI('err','全キー使用済み (403)');throw new Error('HTTP 403')}
-    if(!res.ok)throw new Error('HTTP '+res.status);
-    const json=await res.json();
+    // ── ステータス別エラーハンドリング ──────────────────
+    if(!res.ok){
+      const status=res.status;
+      let errMsg;
+      if(status===401)       errMsg=`認証エラー (401): X-Master-Key を確認してください`;
+      else if(status===403)  errMsg=`APIキーを確認してください (403)`;
+      else if(status===404)  errMsg=`BIN IDを確認してください (404)`;
+      else if(status===429)  errMsg=`リクエスト過多 (429): しばらく待ってください`;
+      else if(status>=500)   errMsg=`JSONBinサーバーエラー (${status})`;
+      else                   errMsg=`HTTPエラー (${status})`;
+      console.error(`[JB] 読込失敗 HTTP ${status}:`, errMsg, '| BIN:', BIN_ID, '| URL:', loadUrl);
+      console.groupEnd();
+      throw new Error(errMsg);
+    }
+    // ── レスポンスのパース ──────────────────────────────
+    let json;
+    try{
+      json=await res.json();
+    }catch(parseErr){
+      console.error('[JB] JSONパースエラー:', parseErr.message);
+      console.groupEnd();
+      throw new Error('JSONパースエラー: '+parseErr.message);
+    }
     const data=json.record||json;
-    if(data&&typeof data==='object'){
-      const remoteVer=Number(data.version)||0;
-      if(!isManual&&remoteVer>0&&remoteVer===_localVersion){
-        _lastSyncTime=Date.now();_isLoading=false;
-        setSyncUI('ok',`同期済み（スキップ） ✓ (v${_localVersion})`);return;
-      }
-      applyData(data);lsSave();localStorage.removeItem(LS_DIRTY);
+    if(!data||typeof data!=='object'){
+      console.error('[JB] 不正なデータ形式:', typeof data, data);
+      console.groupEnd();
+      throw new Error('不正なデータ形式');
     }
+    // ── バージョンスキップ判定 ──────────────────────────
+    const remoteVer=Number(data.version)||0;
+    console.log(`[JB] 読込成功: バージョン ${remoteVer}、カード ${(data.cards||[]).length} 件、完了 ${(data.done||[]).length} 件`);
+    if(!isManual&&remoteVer>0&&remoteVer===_localVersion){
+      _lastSyncTime=Date.now();_isLoading=false;
+      setSyncUI('ok',`同期済み（スキップ） ✓ (v${_localVersion})`);
+      console.log('[JB] バージョン同一 → スキップ (v'+_localVersion+')');
+      console.groupEnd();
+      return;
+    }
+    applyData(data);
+    lsSave();localStorage.removeItem(LS_DIRTY);
     pruneHistory();
     _lastSyncTime=Date.now();
     render();_isLoading=false;
     setSyncUI('ok','読込完了 ✓'+(isManual?' （手動更新）':''));
+    console.log('[JB] データ適用完了 (v'+_localVersion+')');
+    console.groupEnd();
   }catch(e){
     lsLoad();lsBackup();pruneHistory();
     _lastSyncTime=Date.now();_lastSyncError=Date.now();
     render();_isLoading=false;
-    if(!e.message.includes('403'))setSyncUI('err','読込失敗（キャッシュ使用中）',true);
-    if(_online&&isManual&&!e.message.includes('403'))toast('⚠️ BIN読込失敗: '+e.message);
+    const msg=e.message||'不明なエラー';
+    console.error('[JB] cloudLoad 失敗:', msg);
+    console.error('[JB] 設定確認 → BIN_ID:', BIN_ID, '| キー', _ks.keyIdx+1, '(先頭8文字):', _getCurrentKey().slice(0,16)+'...');
+    console.groupEnd();
+    // エラー種別に応じた UI メッセージ
+    const is403=msg.includes('403'),is404=msg.includes('404'),isNet=msg.includes('通信エラー')||msg.includes('タイムアウト');
+    if(is403){
+      setSyncUI('err','APIキーを確認してください (403)',false);
+      toast('🔑 読込失敗 — APIキーが無効です (403)');
+    }else if(is404){
+      setSyncUI('err','BIN IDを確認してください (404)',false);
+      toast('❌ 読込失敗 — BIN IDが見つかりません (404)');
+    }else if(isNet){
+      setSyncUI('err','通信エラー — ネットワークを確認してください',true);
+      if(isManual)toast('📡 通信エラーです。ネットワーク接続を確認してください');
+    }else{
+      setSyncUI('err','読込失敗（キャッシュ使用中）: '+msg,true);
+      if(isManual)toast('⚠️ BIN読込失敗: '+msg);
+    }
   }
 }
 
