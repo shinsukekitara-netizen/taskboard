@@ -572,7 +572,8 @@ function save(){
 }
 
 async function cloudSave(){
-  if(_saving)return;
+  const _req=Number(localStorage.getItem('jb_req_pb')||0)+1;localStorage.setItem('jb_req_pb',_req);if(_req>8000&&_req%100===1){alert('⚠️ PB用JSONBin リクエスト数が'+_req+'回に達しました！
+新しいBINの作成をおすすめします。');} if(_saving)return;
   _saving=true;
   setSyncUI('saving','保存中…');
   try{
