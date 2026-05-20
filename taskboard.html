@@ -502,7 +502,7 @@ function gid(){return Date.now().toString(36)+Math.random().toString(36).slice(2
 // CLOUD SYNC — JSONBin.io (シンプル実装)
 // ─────────────────────────────────────────────
 const MASTER_KEY = "$2a$10$ej5f2TOJF2UJZSX/6/ThT.f6tzom3BbapyEwIAp.f6ehCc5y6ox16";
-const BIN_ID     = "6a0cf5096877513b279d8c48";
+const BIN_ID     = "6a0cf5096877513b279d8c48"; const ARCHIVE_BIN_ID = "6a0cfca1ee5a733b12e90815";
 const JBBASE     = 'https://api.jsonbin.io/v3/b';
 const LS_DIRTY   = 'tb3_dirty';
 const LS_CACHE   = 'tb3_cache';
@@ -589,14 +589,14 @@ const _req=Number(localStorage.getItem('jb_req')||0)+1;localStorage.setItem('jb_
     const res=await fetch(`${JBBASE}/${BIN_ID}`,{
       method:'PUT',
       headers:{'Content-Type':'application/json','X-Master-Key':MASTER_KEY},
-      body:JSON.stringify(S)
+      body:JSON.stringify({...S,cards:S.cards.filter(c=>!c.completed)})
     });
     if(res.status===401||res.status===403){_show4xxWarning(res.status);throw new Error('HTTP '+res.status)}
     if(!res.ok)throw new Error('HTTP '+res.status);
     _localVersion=S.version;
     lsSave();localStorage.removeItem(LS_DIRTY);
     console.log('[JB] 保存成功 v'+_localVersion+' カード:'+S.cards.length+'件');
-    setSyncUI('ok','クラウド保存済み ✓ (v'+_localVersion+')');
+    const _done=S.cards.filter(c=>c.completed);if(_done.length>0){fetch(`${JBBASE}/${ARCHIVE_BIN_ID}`,{method:'PUT',headers:{'Content-Type':'application/json','X-Master-Key':MASTER_KEY},body:JSON.stringify({...S,cards:_done})});} setSyncUI('ok','クラウド保存済み ✓ (v'+_localVersion+')');
   }catch(e){
     lsBackup();
     const msg=e.message||'';
