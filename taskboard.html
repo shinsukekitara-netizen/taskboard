@@ -1636,7 +1636,7 @@ function exportCSV(){
   a.href=URL.createObjectURL(new Blob(['\uFEFF'+csv],{type:'text/csv;charset=utf-8'}));
   a.download=`taskboard_${today()}.csv`;
   a.click();
-  toast('📊 CSVをエクスポートしました（'+（rows.length-1)+'件）');
+  toast('📊 CSVをエクスポートしました（'+(rows.length-1)+'件）');
 }
 
 // ─────────────────────────────────────────────
