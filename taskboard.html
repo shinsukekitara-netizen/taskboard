@@ -18,8 +18,11 @@ body{font-family:'Noto Sans JP',sans-serif;background:var(--bg);color:var(--text
 ::-webkit-scrollbar{width:5px;height:5px}::-webkit-scrollbar-track{background:var(--bg2)}
 ::-webkit-scrollbar-thumb{background:var(--border2);border-radius:3px}
 
+/* ── STICKY HEADER WRAP ── */
+.hdr-wrap{position:sticky;top:0;z-index:100;background:var(--bg)}
+
 /* ── HEADER ── */
-.hdr{background:linear-gradient(135deg,var(--bg2),rgba(79,142,247,.07));border-bottom:1px solid var(--border);padding:14px 20px;position:sticky;top:0;z-index:100;backdrop-filter:blur(16px)}
+.hdr{background:linear-gradient(135deg,var(--bg2),rgba(79,142,247,.07));border-bottom:1px solid var(--border);padding:14px 20px;backdrop-filter:blur(16px)}
 .hdr-top{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
 .logo{font-family:'JetBrains Mono',monospace;font-size:1.3rem;font-weight:700;color:var(--accent);display:flex;align-items:center;gap:6px;white-space:nowrap;cursor:pointer;user-select:none}
 .logo:hover{opacity:.8}
@@ -319,6 +322,7 @@ body{font-family:'Noto Sans JP',sans-serif;background:var(--bg);color:var(--text
 </head>
 <body>
 
+<div class="hdr-wrap">
 <header class="hdr">
   <div class="hdr-top">
     <div class="logo" onclick="resetFilters()" title="クリックで絞り込み解除">⚡<b>Task</b>Board</div>
@@ -353,6 +357,7 @@ body{font-family:'Noto Sans JP',sans-serif;background:var(--bg);color:var(--text
     <option value="n">⚫ その他</option>
   </select>
 </div>
+</div><!-- /.hdr-wrap -->
 
 <main class="main">
   <div class="sec-lbl">進行中のタスク</div>
@@ -501,8 +506,8 @@ function gid(){return Date.now().toString(36)+Math.random().toString(36).slice(2
 // ─────────────────────────────────────────────
 // CLOUD SYNC — JSONBin.io (シンプル実装)
 // ─────────────────────────────────────────────
-const MASTER_KEY = "$2a$10$ej5f2TOJF2UJZSX/6/ThT.f6tzom3BbapyEwIAp.f6ehCc5y6ox16";
-const BIN_ID     = "6a0cf5096877513b279d8c48"; const ARCHIVE_BIN_ID = "6a0cfca1ee5a733b12e90815";
+const MASTER_KEY = "$2a$10$ej5f2T0JF2UJZSX/6/ThT.f6tzom3BbapyEwIAp.f6ehCc5y6ox16";
+const BIN_ID     = "6a063459c0954111d8248cb5";
 const JBBASE     = 'https://api.jsonbin.io/v3/b';
 const LS_DIRTY   = 'tb3_dirty';
 const LS_CACHE   = 'tb3_cache';
@@ -572,8 +577,7 @@ function save(){
 }
 
 async function cloudSave(){
-const _req=Number(localStorage.getItem('jb_req')||0)+1;localStorage.setItem('jb_req',_req);if(_req>8000&&_req%100===1){alert('JSONBin 8000回超え！新BIN作成を！');}
-    if(_saving)return;
+  if(_saving)return;
   _saving=true;
   setSyncUI('saving','保存中…');
   try{
@@ -589,14 +593,14 @@ const _req=Number(localStorage.getItem('jb_req')||0)+1;localStorage.setItem('jb_
     const res=await fetch(`${JBBASE}/${BIN_ID}`,{
       method:'PUT',
       headers:{'Content-Type':'application/json','X-Master-Key':MASTER_KEY},
-      body:JSON.stringify({...S,cards:S.cards.filter(c=>!c.completed)})
+      body:JSON.stringify(S)
     });
     if(res.status===401||res.status===403){_show4xxWarning(res.status);throw new Error('HTTP '+res.status)}
     if(!res.ok)throw new Error('HTTP '+res.status);
     _localVersion=S.version;
     lsSave();localStorage.removeItem(LS_DIRTY);
     console.log('[JB] 保存成功 v'+_localVersion+' カード:'+S.cards.length+'件');
-    const _done=S.cards.filter(c=>c.completed);if(_done.length>0){fetch(`${JBBASE}/${ARCHIVE_BIN_ID}`,{method:'PUT',headers:{'Content-Type':'application/json','X-Master-Key':MASTER_KEY},body:JSON.stringify({...S,cards:_done})});} setSyncUI('ok','クラウド保存済み ✓ (v'+_localVersion+')');
+    setSyncUI('ok','クラウド保存済み ✓ (v'+_localVersion+')');
   }catch(e){
     lsBackup();
     const msg=e.message||'';
@@ -1596,14 +1600,43 @@ function _dgClean(){
 // CSV EXPORT
 // ─────────────────────────────────────────────
 function exportCSV(){
-  const rows=[['ID','タイトル','種別','期日','カテゴリ','緊急','重要','タグ','メモ','ルーチン','サブ数','完了数']];
+  // 作業量 → 日本語ラベル変換
+  const waLabel={light:'軽度','1h':'1時間程度',over1h:'1時間以上',waiting:'他者待ち'};
+  // ヘッダー行（大カード追加列: 参考URL / 作業量 / ルーチン種別 / ルーチン日）
+  const rows=[['ID','タイトル','種別','期日','カテゴリ','緊急','重要','タグ','メモ','ルーチン','サブ数','完了数','参考URL','作業量','ルーチン種別','ルーチン日']];
   [...S.cards,...S.done].forEach(c=>{
     const p=prog(c);
-    rows.push([c.id,c.title,S.done.includes(c)?'完了':'進行中',c.dueDate,c.category,c.urgent?'○':'',c.important?'○':'',c.tags.join(';'),c.memo,c.isRoutine?c.routineType:'',p?p.t:0,p?p.d:0]);
-    c.subCards.forEach(s=>rows.push(['→'+s.id,'  └'+s.title,'サブタスク',s.dueDate,'','','','','','','',s.completed?'完了':'未完了']));
+    // 大カード行
+    rows.push([
+      c.id, c.title, S.done.includes(c)?'完了':'進行中',
+      c.dueDate||'', c.category||'',
+      c.urgent?'○':'', c.important?'○':'',
+      (c.tags||[]).join(';'), c.memo||'',
+      c.isRoutine?(c.routineType||''):'',
+      p?p.t:0, p?p.d:0,
+      (c.urls||[]).join(';'),          // 参考URL（配列を;区切り）
+      '',                               // 作業量（大カードはなし）
+      c.routineType||'',               // ルーチン種別
+      c.routineDay!=null?c.routineDay:'' // ルーチン日
+    ]);
+    // 小カード行
+    (c.subCards||[]).forEach(s=>rows.push([
+      '→'+s.id, '  └'+s.title, 'サブタスク',
+      s.dueDate||'', '', '', '', '', '',
+      s.isRoutine?(s.routineType||''):'',
+      '', s.completed?'完了':'未完了',
+      '',                               // 参考URL（サブはなし）
+      waLabel[s.workAmount]||'',        // 作業量 → 日本語
+      s.routineType||'',               // ルーチン種別
+      s.routineDay!=null?s.routineDay:'' // ルーチン日
+    ]));
   });
   const csv=rows.map(r=>r.map(v=>`"${String(v).replace(/"/g,'""')}"`).join(',')).join('\n');
-  const a=document.createElement('a');a.href=URL.createObjectURL(new Blob(['\uFEFF'+csv],{type:'text/csv;charset=utf-8'}));a.download=`taskboard_${today()}.csv`;a.click();toast('📊 CSVをエクスポートしました');
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(new Blob(['\uFEFF'+csv],{type:'text/csv;charset=utf-8'}));
+  a.download=`taskboard_${today()}.csv`;
+  a.click();
+  toast('📊 CSVをエクスポートしました（'+（rows.length-1)+'件）');
 }
 
 // ─────────────────────────────────────────────

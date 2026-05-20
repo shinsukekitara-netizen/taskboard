@@ -501,7 +501,7 @@ function gid(){return Date.now().toString(36)+Math.random().toString(36).slice(2
 // ─────────────────────────────────────────────
 // CLOUD SYNC — JSONBin.io (シンプル実装)
 // ─────────────────────────────────────────────
-const MASTER_KEY = "$2a$10$ej5f2TOJF2UJZSX/6/ThT.f6tzom3BbapyEwIAp.f6ehCc5y6ox16";
+const MASTER_KEY = "$2a$10$ej5f2T0JF2UJZSX/6/ThT.f6tzom3BbapyEwIAp.f6ehCc5y6ox16";
 const BIN_ID     = "69facd8e856a682189b0557a";
 const JBBASE     = 'https://api.jsonbin.io/v3/b';
 const LS_DIRTY   = 'tb3pb_dirty';
@@ -572,8 +572,7 @@ function save(){
 }
 
 async function cloudSave(){
-  const _req=Number(localStorage.getItem('jb_req_pb')||0)+1;localStorage.setItem('jb_req_pb',_req);if(_req>8000&&_req%100===1){alert('⚠️ PB用JSONBin リクエスト数が'+_req+'回に達しました！
-新しいBINの作成をおすすめします。');} if(_saving)return;
+  if(_saving)return;
   _saving=true;
   setSyncUI('saving','保存中…');
   try{
