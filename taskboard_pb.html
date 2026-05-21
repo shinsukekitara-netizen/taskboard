@@ -1594,14 +1594,43 @@ function _dgClean(){
 // CSV EXPORT
 // ─────────────────────────────────────────────
 function exportCSV(){
-  const rows=[['ID','タイトル','種別','期日','カテゴリ','緊急','重要','タグ','メモ','ルーチン','サブ数','完了数']];
+  // 作業量 → 日本語ラベル変換
+  const waLabel={light:'軽度','1h':'1時間程度',over1h:'1時間以上',waiting:'他者待ち'};
+  // ヘッダー行（大カード追加列: 参考URL / 作業量 / ルーチン種別 / ルーチン日）
+  const rows=[['ID','タイトル','種別','期日','カテゴリ','緊急','重要','タグ','メモ','ルーチン','サブ数','完了数','参考URL','作業量','ルーチン種別','ルーチン日']];
   [...S.cards,...S.done].forEach(c=>{
     const p=prog(c);
-    rows.push([c.id,c.title,S.done.includes(c)?'完了':'進行中',c.dueDate,c.category,c.urgent?'○':'',c.important?'○':'',c.tags.join(';'),c.memo,c.isRoutine?c.routineType:'',p?p.t:0,p?p.d:0]);
-    c.subCards.forEach(s=>rows.push(['→'+s.id,'  └'+s.title,'サブタスク',s.dueDate,'','','','','','','',s.completed?'完了':'未完了']));
+    // 大カード行
+    rows.push([
+      c.id, c.title, S.done.includes(c)?'完了':'進行中',
+      c.dueDate||'', c.category||'',
+      c.urgent?'○':'', c.important?'○':'',
+      (c.tags||[]).join(';'), c.memo||'',
+      c.isRoutine?(c.routineType||''):'',
+      p?p.t:0, p?p.d:0,
+      (c.urls||[]).join(';'),           // 参考URL（配列を;区切り）
+      '',                                // 作業量（大カードはなし）
+      c.routineType||'',                // ルーチン種別
+      c.routineDay!=null?c.routineDay:'' // ルーチン日
+    ]);
+    // 小カード行
+    (c.subCards||[]).forEach(s=>rows.push([
+      '→'+s.id, '  └'+s.title, 'サブタスク',
+      s.dueDate||'', '', '', '', '', '',
+      s.isRoutine?(s.routineType||''):'',
+      '', s.completed?'完了':'未完了',
+      '',                                // 参考URL（サブはなし）
+      waLabel[s.workAmount]||'',         // 作業量 → 日本語
+      s.routineType||'',                // ルーチン種別
+      s.routineDay!=null?s.routineDay:'' // ルーチン日
+    ]));
   });
   const csv=rows.map(r=>r.map(v=>`"${String(v).replace(/"/g,'""')}"`).join(',')).join('\n');
-  const a=document.createElement('a');a.href=URL.createObjectURL(new Blob(['\uFEFF'+csv],{type:'text/csv;charset=utf-8'}));a.download=`taskboard_${today()}.csv`;a.click();toast('📊 CSVをエクスポートしました');
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(new Blob(['\uFEFF'+csv],{type:'text/csv;charset=utf-8'}));
+  a.download=`taskboard_${today()}.csv`;
+  a.click();
+  toast('📊 CSVをエクスポートしました（'+(rows.length-1)+'件）');
 }
 
 // ─────────────────────────────────────────────
