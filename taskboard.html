@@ -581,14 +581,26 @@ async function cloudSave(){
   _saving=true;
   setSyncUI('saving','保存中…');
   try{
+    // ── バージョン確認（競合検知）──────────────────────────
+    // 403/404 はレート制限の可能性があるためログのみ → PUT は続行する
     try{
       const chk=await fetch(`${JBBASE}/${BIN_ID}/latest`,{headers:{'X-Master-Key':MASTER_KEY}});
       if(chk.ok){
         const j=await chk.json();
         const remoteVer=Number((j.record||j).version)||0;
-        if(remoteVer!==_localVersion){_saving=false;lsSave();try{localStorage.setItem(LS_STASH,localStorage.getItem(LS_CACHE));}catch(_){}showConflictWarning();return;}
-      }else if(chk.status===401||chk.status===403){_saving=false;_show4xxWarning(chk.status);return;}
-    }catch(chkErr){console.warn('[JB] バージョン確認スキップ:',chkErr.message)}
+        if(remoteVer!==_localVersion){
+          _saving=false;lsSave();
+          try{localStorage.setItem(LS_STASH,localStorage.getItem(LS_CACHE));}catch(_){}
+          showConflictWarning();return;
+        }
+      }else{
+        // 200以外（403・429等）はバージョン確認を諦めてPUTを試みる
+        console.warn('[JB] バージョン確認 HTTP '+chk.status+' → 保存を続行');
+      }
+    }catch(chkErr){
+      console.warn('[JB] バージョン確認スキップ:',chkErr.message);
+    }
+    // ── PUT 保存 ──────────────────────────────────────────
     S.version=_localVersion+1;
     const res=await fetch(`${JBBASE}/${BIN_ID}`,{
       method:'PUT',
@@ -604,7 +616,10 @@ async function cloudSave(){
   }catch(e){
     lsBackup();
     const msg=e.message||'';
-    if(!msg.includes('401')&&!msg.includes('403')){setSyncUI('err','通信エラー（ローカル保存済み）',true);toast('📡 通信エラーです。LocalStorageに一時保存しました');}
+    if(!msg.includes('401')&&!msg.includes('403')){
+      setSyncUI('err','通信エラー（ローカル保存済み）',true);
+      toast('📡 通信エラーです。LocalStorageに一時保存しました');
+    }
   }finally{_saving=false}
 }
 
@@ -1636,7 +1651,7 @@ function exportCSV(){
   a.href=URL.createObjectURL(new Blob(['\uFEFF'+csv],{type:'text/csv;charset=utf-8'}));
   a.download=`taskboard_${today()}.csv`;
   a.click();
- toast('📊 CSVをエクスポートしました（'+(rows.length-1)+'件）');
+  toast('📊 CSVをエクスポートしました（'+（rows.length-1)+'件）');
 }
 
 // ─────────────────────────────────────────────
