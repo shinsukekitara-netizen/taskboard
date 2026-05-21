@@ -18,8 +18,11 @@ body{font-family:'Noto Sans JP',sans-serif;background:var(--bg);color:var(--text
 ::-webkit-scrollbar{width:5px;height:5px}::-webkit-scrollbar-track{background:var(--bg2)}
 ::-webkit-scrollbar-thumb{background:var(--border2);border-radius:3px}
 
+/* ── STICKY HEADER WRAP ── */
+.hdr-wrap{position:sticky;top:0;z-index:100;background:var(--bg)}
+
 /* ── HEADER ── */
-.hdr{background:linear-gradient(135deg,#1a56db 0%,#2563eb 50%,#1d4ed8 100%);border-bottom:1px solid rgba(255,255,255,.2);padding:14px 20px;position:sticky;top:0;z-index:100;backdrop-filter:blur(16px);box-shadow:0 4px 20px rgba(26,86,219,.35)}
+.hdr{background:linear-gradient(135deg,#1a56db 0%,#2563eb 50%,#1d4ed8 100%);border-bottom:1px solid rgba(255,255,255,.2);padding:14px 20px;backdrop-filter:blur(16px);box-shadow:0 4px 20px rgba(26,86,219,.35)}
 .hdr-top{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
 .logo{font-family:'JetBrains Mono',monospace;font-size:1.3rem;font-weight:700;color:#fff;display:flex;align-items:center;gap:6px;white-space:nowrap;cursor:pointer;user-select:none}
 .logo:hover{opacity:.8}
@@ -319,6 +322,7 @@ body{font-family:'Noto Sans JP',sans-serif;background:var(--bg);color:var(--text
 </head>
 <body>
 
+<div class="hdr-wrap">
 <header class="hdr">
   <div class="hdr-top">
     <div class="logo" onclick="resetFilters()" title="クリックで絞り込み解除">🔵<b>Task Board</b> PB</div>
@@ -353,6 +357,7 @@ body{font-family:'Noto Sans JP',sans-serif;background:var(--bg);color:var(--text
     <option value="n">⚫ その他</option>
   </select>
 </div>
+</div><!-- /.hdr-wrap -->
 
 <main class="main">
   <div class="sec-lbl">進行中のタスク</div>
@@ -1579,14 +1584,34 @@ function _dgClean(){
 // CSV EXPORT
 // ─────────────────────────────────────────────
 function exportCSV(){
-  const rows=[['ID','タイトル','種別','期日','カテゴリ','緊急','重要','タグ','メモ','ルーチン','サブ数','完了数']];
+  const waLabel={'light':'軽度','1h':'1時間程度','over1h':'1時間以上','waiting':'他者待ち'};
+  const rows=[['ID','タイトル','種別','期日','カテゴリ','緊急','重要','タグ','メモ','ルーチン','サブ数','完了数','参考URL','作業量','ルーチン種別','ルーチン日']];
   [...S.cards,...S.done].forEach(c=>{
     const p=prog(c);
-    rows.push([c.id,c.title,S.done.includes(c)?'完了':'進行中',c.dueDate,c.category,c.urgent?'○':'',c.important?'○':'',c.tags.join(';'),c.memo,c.isRoutine?c.routineType:'',p?p.t:0,p?p.d:0]);
-    c.subCards.forEach(s=>rows.push(['→'+s.id,'  └'+s.title,'サブタスク',s.dueDate,'','','','','','','',s.completed?'完了':'未完了']));
+    rows.push([
+      c.id,c.title,S.done.includes(c)?'完了':'進行中',c.dueDate,c.category,
+      c.urgent?'○':'',c.important?'○':'',c.tags.join(';'),c.memo,
+      c.isRoutine?c.routineType:'',p?p.t:0,p?p.d:0,
+      (c.urls||[]).join(';'),
+      '',
+      c.isRoutine?(c.routineType||''):'',
+      c.isRoutine&&c.routineDay!=null?c.routineDay:''
+    ]);
+    c.subCards.forEach(s=>rows.push([
+      '→'+s.id,'  └'+s.title,'サブタスク',s.dueDate,'','','','','',
+      s.isRoutine?(s.routineType||''):'','',s.completed?'完了':'未完了',
+      '',
+      waLabel[s.workAmount]||'',
+      s.isRoutine?(s.routineType||''):'',
+      s.isRoutine&&s.routineDay!=null?s.routineDay:''
+    ]));
   });
-  const csv=rows.map(r=>r.map(v=>`"${String(v).replace(/"/g,'""')}"`).join(',')).join('\n');
-  const a=document.createElement('a');a.href=URL.createObjectURL(new Blob(['\uFEFF'+csv],{type:'text/csv;charset=utf-8'}));a.download=`taskboard_${today()}.csv`;a.click();toast('📊 CSVをエクスポートしました');
+  const csv=rows.map(r=>r.map(v=>`"${String(v).replace(/"/g,'""')}`).join(',')).join('\n');
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(new Blob(['\uFEFF'+csv],{type:'text/csv;charset=utf-8'}));
+  a.download=`taskboard_${today()}.csv`;
+  a.click();
+  toast('📊 CSVをエクスポートしました（'+(rows.length-1)+'件）');
 }
 
 // ─────────────────────────────────────────────
