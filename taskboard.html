@@ -515,6 +515,7 @@ const LS_STASH   = 'tb3_stash';
 const LS_BACKUP  = 'tb3_backup';
 
 let _saveTimer=null, _saving=false, _isLoading=false;
+let _putBlocked=false; // PUT 403 時にリトライを止めるフラグ
 let _online=navigator.onLine;
 let _localVersion=0, _lastSyncTime=0, _lastSyncError=0;
 const _SYNC_THROTTLE=300000;
@@ -578,36 +579,24 @@ function save(){
 
 async function cloudSave(){
   if(_saving)return;
+  if(_putBlocked){
+    setSyncUI('err','書き込み不可（BIN移行が必要）');
+    return;
+  }
   _saving=true;
   setSyncUI('saving','保存中…');
   try{
-    // ── バージョン確認（競合検知）──────────────────────────
-    // 403/404 はレート制限の可能性があるためログのみ → PUT は続行する
-    try{
-      const chk=await fetch(`${JBBASE}/${BIN_ID}/latest`,{headers:{'X-Master-Key':MASTER_KEY}});
-      if(chk.ok){
-        const j=await chk.json();
-        const remoteVer=Number((j.record||j).version)||0;
-        if(remoteVer!==_localVersion){
-          _saving=false;lsSave();
-          try{localStorage.setItem(LS_STASH,localStorage.getItem(LS_CACHE));}catch(_){}
-          showConflictWarning();return;
-        }
-      }else{
-        // 200以外（403・429等）はバージョン確認を諦めてPUTを試みる
-        console.warn('[JB] バージョン確認 HTTP '+chk.status+' → 保存を続行');
-      }
-    }catch(chkErr){
-      console.warn('[JB] バージョン確認スキップ:',chkErr.message);
-    }
-    // ── PUT 保存 ──────────────────────────────────────────
     S.version=_localVersion+1;
     const res=await fetch(`${JBBASE}/${BIN_ID}`,{
       method:'PUT',
       headers:{'Content-Type':'application/json','X-Master-Key':MASTER_KEY},
       body:JSON.stringify(S)
     });
-    if(res.status===401||res.status===403){_show4xxWarning(res.status);throw new Error('HTTP '+res.status)}
+    if(res.status===401||res.status===403){
+      _putBlocked=true; // 以降のリトライを止める
+      _show403MigrateWarning(res.status);
+      throw new Error('HTTP '+res.status);
+    }
     if(!res.ok)throw new Error('HTTP '+res.status);
     _localVersion=S.version;
     lsSave();localStorage.removeItem(LS_DIRTY);
@@ -673,6 +662,36 @@ function _show4xxWarning(status){
   syncBar?syncBar.insertAdjacentElement('afterend',bar):document.body.prepend(bar);
   setSyncUI('err','APIキーエラーです（'+status+'）');
   toast('🔑 APIキーエラーです。管理者に連絡してください（'+status+'）');
+}
+
+function _show403MigrateWarning(status){
+  document.getElementById('migrateBar')?.remove();
+  const bar=document.createElement('div');
+  bar.id='migrateBar';
+  bar.style.cssText='position:sticky;top:0;z-index:502;background:#1a1a2e;border-bottom:2px solid #f59e0b;color:#fde68a;padding:12px 16px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;font-size:.84rem;line-height:1.6';
+  bar.innerHTML=`<span>⚠️ <strong>クラウド保存ができません（${status}）。</strong><br>データはLocalStorageに保存済みです。安全です。<br><small style="opacity:.85">BINの書き込み権限がありません。F12コンソールで移行スクリプトを実行してください。</small></span>
+    <button onclick="this.parentElement.remove()" style="background:transparent;border:1px solid rgba(253,211,77,.4);color:#fde68a;padding:6px 12px;border-radius:5px;cursor:pointer;font-size:.8rem;flex-shrink:0">閉じる</button>`;
+  const syncBar=document.querySelector('.sync-bar');
+  syncBar?syncBar.insertAdjacentElement('afterend',bar):document.body.prepend(bar);
+  setSyncUI('err','保存不可（BIN移行が必要）—データはローカルに保存済み');
+  lsBackup();
+  console.warn('[JB] PUT 403: BINの書き込み権限なし。以下のスクリプトをコンソールで実行してください：');
+  console.log(`
+// ═══ BIN移行スクリプト ═══
+(async()=>{
+  const KEY='${MASTER_KEY}';
+  const OLD='${BIN_ID}';
+  const BASE='${JBBASE}';
+  const r=await fetch(BASE+'/'+OLD+'/latest',{headers:{'X-Master-Key':KEY}});
+  const d=await r.json();
+  const r2=await fetch(BASE,{
+    method:'POST',
+    headers:{'Content-Type':'application/json','X-Master-Key':KEY,'X-Bin-Name':'TaskBoard-Main'},
+    body:JSON.stringify(d.record||d)
+  });
+  const d2=await r2.json();
+  console.log('✅ 新BIN ID:', d2.metadata?.id, '← GitHubのBIN_IDをこの値に更新してください');
+})();`);
 }
 
 window.addEventListener('online',()=>{
