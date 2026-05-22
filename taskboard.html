@@ -506,9 +506,10 @@ function gid(){return Date.now().toString(36)+Math.random().toString(36).slice(2
 // ─────────────────────────────────────────────
 // CLOUD SYNC — JSONBin.io (シンプル実装)
 // ─────────────────────────────────────────────
-const MASTER_KEY = "$2a$10$ej5f2TOJF2UJZSX/6/ThT.f6tzom3BbapyEwIAp.f6ehCc5y6ox16";
-const BIN_ID     = "6a0fae936610dd3ae8856a01";
-const JBBASE     = 'https://api.jsonbin.io/v3/b';
+const MASTER_KEY   = "$2a$10$ej5f2TOJF2UJZSX/6/ThT.f6tzom3BbapyEwIAp.f6ehCc5y6ox16";
+const BIN_ID       = "6a0fae936610dd3ae8856a01";
+const ARCHIVE_BIN_ID = "6a0cfca1ee5a733b12e90815"; // 完了済みカード用アーカイブBIN
+const JBBASE       = 'https://api.jsonbin.io/v3/b';
 const LS_DIRTY   = 'tb3_dirty';
 const LS_CACHE   = 'tb3_cache';
 const LS_STASH   = 'tb3_stash';
@@ -579,28 +580,48 @@ function save(){
 
 async function cloudSave(){
   if(_saving)return;
-  if(_putBlocked){
-    setSyncUI('err','書き込み不可（BIN移行が必要）');
-    return;
-  }
+  if(_putBlocked){setSyncUI('err','書き込み不可（BIN移行が必要）');return;}
   _saving=true;
   setSyncUI('saving','保存中…');
   try{
-    S.version=_localVersion+1;
+    // ── サイズチェック → 80KB超えたら完了カードをアーカイブへ移動 ──
+    const dataStr=JSON.stringify(S);
+    const sizeKB=dataStr.length/1024;
+    console.log('[JB] データサイズ:', Math.round(sizeKB*10)/10+'KB');
+    if(sizeKB>80&&S.done&&S.done.length>0){
+      await _archiveDoneCards();
+    }
+    // ── PUT 保存 ──────────────────────────────────────────
+    S.version=(_localVersion||0)+1;
     const res=await fetch(`${JBBASE}/${BIN_ID}`,{
       method:'PUT',
       headers:{'Content-Type':'application/json','X-Master-Key':MASTER_KEY},
       body:JSON.stringify(S)
     });
-    if(res.status===401||res.status===403){
-      _putBlocked=true; // 以降のリトライを止める
-      _show403MigrateWarning(res.status);
-      throw new Error('HTTP '+res.status);
+    if(res.status===403){
+      // 403 はサイズ超過の可能性 → 強制アーカイブして再試行
+      if(S.done&&S.done.length>0){
+        console.warn('[JB] 403 → 強制アーカイブ後に再試行');
+        await _archiveDoneCards(true);
+        const res2=await fetch(`${JBBASE}/${BIN_ID}`,{
+          method:'PUT',
+          headers:{'Content-Type':'application/json','X-Master-Key':MASTER_KEY},
+          body:JSON.stringify(S)
+        });
+        if(!res2.ok){_putBlocked=true;_show403MigrateWarning(res2.status);throw new Error('HTTP '+res2.status)}
+        _localVersion=S.version;
+        lsSave();localStorage.removeItem(LS_DIRTY);
+        console.log('[JB] 再試行保存成功 v'+_localVersion);
+        setSyncUI('ok','クラウド保存済み ✓ (v'+_localVersion+')');
+        return;
+      }
+      _putBlocked=true;_show403MigrateWarning(res.status);throw new Error('HTTP 403');
     }
+    if(res.status===401){_show4xxWarning(401);throw new Error('HTTP 401')}
     if(!res.ok)throw new Error('HTTP '+res.status);
     _localVersion=S.version;
     lsSave();localStorage.removeItem(LS_DIRTY);
-    console.log('[JB] 保存成功 v'+_localVersion+' カード:'+S.cards.length+'件');
+    console.log('[JB] 保存成功 v'+_localVersion+' カード:'+S.cards.length+'件 完了:'+S.done.length+'件');
     setSyncUI('ok','クラウド保存済み ✓ (v'+_localVersion+')');
   }catch(e){
     lsBackup();
@@ -610,6 +631,32 @@ async function cloudSave(){
       toast('📡 通信エラーです。LocalStorageに一時保存しました');
     }
   }finally{_saving=false}
+}
+
+/* ── 完了済みカードをアーカイブBINに移動 ── */
+async function _archiveDoneCards(force=false){
+  if(!S.done||S.done.length===0)return;
+  try{
+    // アーカイブBINに追記
+    let archiveData={done:[]};
+    try{
+      const ar=await fetch(`${JBBASE}/${ARCHIVE_BIN_ID}/latest`,{headers:{'X-Master-Key':MASTER_KEY}});
+      if(ar.ok){const aj=await ar.json();archiveData=aj.record||aj;}
+    }catch(e){}
+    archiveData.done=[...(archiveData.done||[]),...S.done];
+    await fetch(`${JBBASE}/${ARCHIVE_BIN_ID}`,{
+      method:'PUT',
+      headers:{'Content-Type':'application/json','X-Master-Key':MASTER_KEY},
+      body:JSON.stringify(archiveData)
+    });
+    const archivedCount=S.done.length;
+    S.done=[];
+    lsSave();
+    console.log('[JB] アーカイブ完了:',archivedCount,'件を移動');
+    if(!force)toast('📦 完了済み'+archivedCount+'件をアーカイブに移動しました（データサイズ最適化）');
+  }catch(e){
+    console.warn('[JB] アーカイブ失敗:',e.message);
+  }
 }
 
 async function cloudLoad(isManual=false){
