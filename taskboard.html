@@ -18,11 +18,8 @@ body{font-family:'Noto Sans JP',sans-serif;background:var(--bg);color:var(--text
 ::-webkit-scrollbar{width:5px;height:5px}::-webkit-scrollbar-track{background:var(--bg2)}
 ::-webkit-scrollbar-thumb{background:var(--border2);border-radius:3px}
 
-/* ── STICKY HEADER WRAP ── */
-.hdr-wrap{position:sticky;top:0;z-index:100;background:var(--bg)}
-
 /* ── HEADER ── */
-.hdr{background:linear-gradient(135deg,var(--bg2),rgba(79,142,247,.07));border-bottom:1px solid var(--border);padding:14px 20px;backdrop-filter:blur(16px)}
+.hdr{background:linear-gradient(135deg,var(--bg2),rgba(79,142,247,.07));border-bottom:1px solid var(--border);padding:14px 20px;position:sticky;top:0;z-index:100;backdrop-filter:blur(16px)}
 .hdr-top{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
 .logo{font-family:'JetBrains Mono',monospace;font-size:1.3rem;font-weight:700;color:var(--accent);display:flex;align-items:center;gap:6px;white-space:nowrap;cursor:pointer;user-select:none}
 .logo:hover{opacity:.8}
@@ -322,7 +319,6 @@ body{font-family:'Noto Sans JP',sans-serif;background:var(--bg);color:var(--text
 </head>
 <body>
 
-<div class="hdr-wrap">
 <header class="hdr">
   <div class="hdr-top">
     <div class="logo" onclick="resetFilters()" title="クリックで絞り込み解除">⚡<b>Task</b>Board</div>
@@ -357,7 +353,6 @@ body{font-family:'Noto Sans JP',sans-serif;background:var(--bg);color:var(--text
     <option value="n">⚫ その他</option>
   </select>
 </div>
-</div><!-- /.hdr-wrap -->
 
 <main class="main">
   <div class="sec-lbl">進行中のタスク</div>
@@ -366,16 +361,6 @@ body{font-family:'Noto Sans JP',sans-serif;background:var(--bg);color:var(--text
   <div class="comp-sec">
     <div class="comp-hdr" onclick="toggleCompleted()">
       <div class="sec-lbl" style="margin:0;flex:1">完了済みタスク（<span id="compCnt">0</span>件）</div>
-      <div style="display:flex;gap:6px;margin-right:10px" onclick="event.stopPropagation()">
-        <button class="btn bd bsm" id="archiveDoneBtn" style="display:none"
-          onclick="archiveDoneCards()" title="完了カードをアーカイブBINに移動（データは保持）">
-          📦 アーカイブ
-        </button>
-        <button class="btn bd bsm" id="deleteAllDoneBtn" style="display:none;color:#f87171"
-          onclick="deleteAllDone()" title="完了カードを全て完全削除">
-          🗑 全て削除
-        </button>
-      </div>
       <span class="comp-tog" id="compTog">▼</span>
     </div>
     <div id="compBoard" class="board" style="display:none"></div>
@@ -386,6 +371,30 @@ body{font-family:'Noto Sans JP',sans-serif;background:var(--bg);color:var(--text
     <div id="routHist"></div>
   </div>
 </main>
+
+<!-- ===== TOKEN SETUP MODAL ===== -->
+<div class="mover" id="tokenSetupModal">
+<div class="modal" style="max-width:440px">
+  <h2>🔑 GitHub トークン設定</h2>
+  <p style="font-size:.85rem;color:var(--text2);line-height:1.7;margin-bottom:16px">
+    クラウド保存にGitHub Personal Access Tokenが必要です。<br>
+    トークンはこのブラウザにのみ保存され、GitHubには送信されません。
+  </p>
+  <div style="margin-bottom:12px">
+    <label style="font-size:.8rem;color:var(--text3);display:block;margin-bottom:6px">GitHub Personal Access Token（ghp_で始まる文字列）</label>
+    <input id="tokenInput" type="password" placeholder="ghp_xxxxxxxxxxxxxxxx"
+      style="width:100%;box-sizing:border-box;padding:10px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:var(--rs);color:var(--text);font-size:.85rem;font-family:'JetBrains Mono',monospace"
+      onkeydown="if(event.key==='Enter')saveTokenSetup()">
+  </div>
+  <p style="font-size:.75rem;color:var(--text3);margin-bottom:16px">
+    ※ 作成方法：<a href="https://github.com/settings/tokens/new" target="_blank" style="color:var(--accent)">github.com/settings/tokens/new</a> で
+    「gist」スコープのトークンを作成してください
+  </p>
+  <div class="mfoot">
+    <button id="tokenSaveBtn" class="btn bp" onclick="saveTokenSetup()">保存して接続</button>
+  </div>
+</div>
+</div>
 
 <!-- ===== CARD MODAL ===== -->
 <div class="mover" id="cardModal">
@@ -514,38 +523,69 @@ let filteredCards=null;
 
 function gid(){return Date.now().toString(36)+Math.random().toString(36).slice(2,9)}
 // ─────────────────────────────────────────────
-// CLOUD SYNC — JSONBin.io (シンプル実装)
+// CLOUD SYNC — GitHub Gist（トークンはLocalStorageに保存）
 // ─────────────────────────────────────────────
-const MASTER_KEY   = "$2a$10$ej5f2TOJF2UJZSX/6/ThT.f6tzom3BbapyEwIAp.f6ehCc5y6ox16";
-const BIN_ID       = "6a0fae936610dd3ae8856a01";
-const ARCHIVE_BIN_ID = "6a0cfca1ee5a733b12e90815"; // 完了済みカード用アーカイブBIN
-const JBBASE       = 'https://api.jsonbin.io/v3/b';
-const LS_DIRTY   = 'tb3_dirty';
-const LS_CACHE   = 'tb3_cache';
-const LS_STASH   = 'tb3_stash';
-const LS_BACKUP  = 'tb3_backup';
+const GIST_ID   = "7ef6f106898526f60ab0037ac58d07d2";
+const GIST_FILE = "taskboard.json";
+const GIST_BASE = "https://api.github.com/gists";
+const LS_DIRTY  = 'tb3_dirty';
+const LS_CACHE  = 'tb3_cache';
+const LS_STASH  = 'tb3_stash';
+const LS_BACKUP = 'tb3_backup';
+const LS_TOKEN  = 'tb3_gist_token'; // トークンはLocalStorageに保存
 
 let _saveTimer=null, _saving=false, _isLoading=false;
-let _putBlocked=false; // PUT 403 時にリトライを止めるフラグ
 let _online=navigator.onLine;
 let _localVersion=0, _lastSyncTime=0, _lastSyncError=0;
 const _SYNC_THROTTLE=300000;
 const _ERROR_COOLDOWN=60000;
 
-console.log('[TaskBoard] BIN_ID:', BIN_ID);
-console.log('[TaskBoard] MASTER_KEY 先頭:', MASTER_KEY.slice(0,14)+'...');
-console.log('[TaskBoard] 接続URL:', JBBASE+'/'+BIN_ID+'/latest');
+function _getToken(){return localStorage.getItem(LS_TOKEN)||'';}
+function _gistHeaders(){
+  return{'Authorization':'Bearer '+_getToken(),'Accept':'application/vnd.github.v3+json','Content-Type':'application/json'};
+}
+
+console.log('[TaskBoard] Gist ID:', GIST_ID);
+console.log('[TaskBoard] Token設定済み:', !!_getToken());
+
+/* ── トークン未設定時のセットアップ ── */
+function _needsSetup(){return !_getToken();}
+function openTokenSetup(){
+  document.getElementById('tokenSetupModal').classList.add('vis');
+}
+async function saveTokenSetup(){
+  const t=document.getElementById('tokenInput').value.trim();
+  if(!t){toast('⚠️ トークンを入力してください');return;}
+  // 接続テスト
+  const btn=document.getElementById('tokenSaveBtn');
+  btn.textContent='確認中…';btn.disabled=true;
+  try{
+    const res=await fetch(GIST_BASE+'/'+GIST_ID,{
+      headers:{'Authorization':'Bearer '+t,'Accept':'application/vnd.github.v3+json'}
+    });
+    if(res.status===401){toast('❌ トークンが無効です。正しいトークンを入力してください');btn.textContent='保存して接続';btn.disabled=false;return;}
+    if(res.status===404){toast('❌ Gist IDが見つかりません');btn.textContent='保存して接続';btn.disabled=false;return;}
+    if(!res.ok){toast('❌ 接続エラー HTTP '+res.status);btn.textContent='保存して接続';btn.disabled=false;return;}
+    // 成功
+    localStorage.setItem(LS_TOKEN,t);
+    document.getElementById('tokenSetupModal').classList.remove('vis');
+    toast('✅ 接続成功！データを読み込みます');
+    cloudLoad(true);
+  }catch(e){
+    toast('❌ 通信エラー: '+e.message);
+    btn.textContent='保存して接続';btn.disabled=false;
+  }
+}
 
 window.tbDiag=async function(){
-  const url=`${JBBASE}/${BIN_ID}/latest`;
-  console.group('[tbDiag] JSONBin 接続テスト');
-  console.log('URL:', url);
-  console.log('MASTER_KEY 先頭:', MASTER_KEY.slice(0,14)+'...');
+  console.group('[tbDiag] GitHub Gist 接続テスト');
+  console.log('Gist ID:', GIST_ID);
+  console.log('Token設定済み:', !!_getToken());
   try{
-    const res=await fetch(url,{headers:{'X-Master-Key':MASTER_KEY}});
+    const res=await fetch(GIST_BASE+'/'+GIST_ID,{headers:_gistHeaders()});
     console.log('HTTP Status:', res.status, res.statusText);
-    if(res.ok){const j=await res.json();const d=j.record||j;console.log('✅ 接続成功 v'+d.version+' カード:'+(d.cards||[]).length+'件');}
-    else{console.error('❌ HTTP '+res.status);if(res.status===401||res.status===403)console.error('  → APIキー/BIN IDを確認してください');}
+    if(res.ok){const g=await res.json();const d=JSON.parse(g.files[GIST_FILE]?.content||'{}');console.log('✅ 接続成功 カード:'+(d.cards||[]).length+'件');}
+    else{console.error('❌ HTTP '+res.status);}
   }catch(e){console.error('❌ 通信エラー:',e.message);}
   console.groupEnd();
 };
@@ -557,7 +597,7 @@ function setSyncUI(state,msg,showRetry=false){
   const retry=document.getElementById('syncRetryBtn');
   if(dot)dot.className='sync-dot '+state;
   if(msgEl)msgEl.textContent=msg;
-  if(idEl)idEl.textContent='BIN:'+BIN_ID.slice(-8);
+  if(idEl)idEl.textContent='Gist:'+GIST_ID.slice(-8);
   if(retry)retry.style.display=showRetry?'':'none';
 }
 
@@ -590,98 +630,54 @@ function save(){
 
 async function cloudSave(){
   if(_saving)return;
-  if(_putBlocked){setSyncUI('err','書き込み不可（BIN移行が必要）');return;}
+  if(_needsSetup()){openTokenSetup();return;}
   _saving=true;
   setSyncUI('saving','保存中…');
   try{
-    // ── サイズチェック → 80KB超えたら完了カードをアーカイブへ移動 ──
-    const dataStr=JSON.stringify(S);
-    const sizeKB=dataStr.length/1024;
-    console.log('[JB] データサイズ:', Math.round(sizeKB*10)/10+'KB');
-    if(sizeKB>80&&S.done&&S.done.length>0){
-      await _archiveDoneCards();
-    }
-    // ── PUT 保存 ──────────────────────────────────────────
     S.version=(_localVersion||0)+1;
-    const res=await fetch(`${JBBASE}/${BIN_ID}`,{
-      method:'PUT',
-      headers:{'Content-Type':'application/json','X-Master-Key':MASTER_KEY},
-      body:JSON.stringify(S)
+    const res=await fetch(GIST_BASE+'/'+GIST_ID,{
+      method:'PATCH',
+      headers:_gistHeaders(),
+      body:JSON.stringify({files:{[GIST_FILE]:{content:JSON.stringify(S)}}})
     });
-    if(res.status===403){
-      // 403 はサイズ超過の可能性 → 強制アーカイブして再試行
-      if(S.done&&S.done.length>0){
-        console.warn('[JB] 403 → 強制アーカイブ後に再試行');
-        await _archiveDoneCards(true);
-        const res2=await fetch(`${JBBASE}/${BIN_ID}`,{
-          method:'PUT',
-          headers:{'Content-Type':'application/json','X-Master-Key':MASTER_KEY},
-          body:JSON.stringify(S)
-        });
-        if(!res2.ok){_putBlocked=true;_show403MigrateWarning(res2.status);throw new Error('HTTP '+res2.status)}
-        _localVersion=S.version;
-        lsSave();localStorage.removeItem(LS_DIRTY);
-        console.log('[JB] 再試行保存成功 v'+_localVersion);
-        setSyncUI('ok','クラウド保存済み ✓ (v'+_localVersion+')');
-        return;
-      }
-      _putBlocked=true;_show403MigrateWarning(res.status);throw new Error('HTTP 403');
+    if(res.status===401){
+      localStorage.removeItem(LS_TOKEN);
+      openTokenSetup();
+      throw new Error('トークン期限切れ');
     }
-    if(res.status===401){_show4xxWarning(401);throw new Error('HTTP 401')}
     if(!res.ok)throw new Error('HTTP '+res.status);
     _localVersion=S.version;
     lsSave();localStorage.removeItem(LS_DIRTY);
-    console.log('[JB] 保存成功 v'+_localVersion+' カード:'+S.cards.length+'件 完了:'+S.done.length+'件');
+    console.log('[Gist] 保存成功 v'+_localVersion+' カード:'+S.cards.length+'件');
     setSyncUI('ok','クラウド保存済み ✓ (v'+_localVersion+')');
   }catch(e){
     lsBackup();
-    const msg=e.message||'';
-    if(!msg.includes('401')&&!msg.includes('403')){
-      setSyncUI('err','通信エラー（ローカル保存済み）',true);
-      toast('📡 通信エラーです。LocalStorageに一時保存しました');
-    }
+    setSyncUI('err','通信エラー（ローカル保存済み）',true);
+    if(!e.message.includes('トークン'))toast('📡 通信エラーです。LocalStorageに一時保存しました');
   }finally{_saving=false}
 }
 
-/* ── 完了済みカードをアーカイブBINに移動 ── */
-async function _archiveDoneCards(force=false){
-  if(!S.done||S.done.length===0)return;
-  try{
-    // アーカイブBINに追記
-    let archiveData={done:[]};
-    try{
-      const ar=await fetch(`${JBBASE}/${ARCHIVE_BIN_ID}/latest`,{headers:{'X-Master-Key':MASTER_KEY}});
-      if(ar.ok){const aj=await ar.json();archiveData=aj.record||aj;}
-    }catch(e){}
-    archiveData.done=[...(archiveData.done||[]),...S.done];
-    await fetch(`${JBBASE}/${ARCHIVE_BIN_ID}`,{
-      method:'PUT',
-      headers:{'Content-Type':'application/json','X-Master-Key':MASTER_KEY},
-      body:JSON.stringify(archiveData)
-    });
-    const archivedCount=S.done.length;
-    S.done=[];
-    lsSave();
-    console.log('[JB] アーカイブ完了:',archivedCount,'件を移動');
-    if(!force)toast('📦 完了済み'+archivedCount+'件をアーカイブに移動しました（データサイズ最適化）');
-  }catch(e){
-    console.warn('[JB] アーカイブ失敗:',e.message);
-  }
-}
-
 async function cloudLoad(isManual=false){
+  if(_needsSetup()){
+    lsLoad();pruneHistory();render();
+    _isLoading=false;
+    setSyncUI('off','トークン未設定（ローカルデータを表示中）');
+    openTokenSetup();
+    return;
+  }
   _isLoading=true;
   if(!_online){lsLoad();_isLoading=false;setSyncUI('off','オフライン（キャッシュ使用中）');render();return}
   setSyncUI('saving','読込中…');
-  console.group('[JB] cloudLoad');
-  console.log('URL:',`${JBBASE}/${BIN_ID}/latest`);
+  console.group('[Gist] cloudLoad');
   try{
-    const res=await fetch(`${JBBASE}/${BIN_ID}/latest`,{headers:{'X-Master-Key':MASTER_KEY}});
+    const res=await fetch(GIST_BASE+'/'+GIST_ID,{headers:_gistHeaders()});
     console.log('HTTP:',res.status);
-    if(res.status===401||res.status===403){_show4xxWarning(res.status);throw new Error('HTTP '+res.status)}
+    if(res.status===401){localStorage.removeItem(LS_TOKEN);openTokenSetup();throw new Error('トークン期限切れ');}
     if(!res.ok)throw new Error('HTTP '+res.status);
-    const json=await res.json();
-    const data=json.record||json;
+    const g=await res.json();
+    const content=g.files[GIST_FILE]?.content;
+    if(!content)throw new Error('データが空です');
+    const data=JSON.parse(content);
     const remoteVer=Number(data.version)||0;
     console.log('読込成功 v'+remoteVer+' カード:'+(data.cards||[]).length+'件');
     if(!isManual&&remoteVer>0&&remoteVer===_localVersion){
@@ -698,57 +694,13 @@ async function cloudLoad(isManual=false){
     lsLoad();lsBackup();pruneHistory();
     _lastSyncTime=Date.now();_lastSyncError=Date.now();
     render();_isLoading=false;
-    console.error('[JB] 読込失敗:',e.message);
+    console.error('[Gist] 読込失敗:',e.message);
     console.groupEnd();
-    const msg=e.message||'';
-    if(!msg.includes('401')&&!msg.includes('403')){
+    if(!e.message.includes('トークン')){
       setSyncUI('err','通信エラー（キャッシュ使用中）',true);
-      if(isManual)toast('📡 通信エラーです。LocalStorageに一時保存しました');
+      if(isManual)toast('📡 通信エラーです。LocalStorageのデータを表示中です');
     }
   }
-}
-
-function _show4xxWarning(status){
-  document.getElementById('authErrBar')?.remove();
-  const bar=document.createElement('div');
-  bar.id='authErrBar';
-  bar.style.cssText='position:sticky;top:0;z-index:502;background:#1e1b4b;border-bottom:2px solid #6366f1;color:#c7d2fe;padding:11px 16px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;font-size:.84rem;line-height:1.5';
-  const txt=(status===401)?'APIキーエラーです。管理者に連絡してください。':'アクセスが拒否されました（'+status+'）。管理者に連絡してください。';
-  bar.innerHTML=`<span>🔑 <strong>${txt}</strong></span><button onclick="this.parentElement.remove()" style="background:transparent;border:1px solid rgba(199,210,254,.4);color:#c7d2fe;padding:6px 12px;border-radius:5px;cursor:pointer;font-size:.8rem;flex-shrink:0">閉じる</button>`;
-  const syncBar=document.querySelector('.sync-bar');
-  syncBar?syncBar.insertAdjacentElement('afterend',bar):document.body.prepend(bar);
-  setSyncUI('err','APIキーエラーです（'+status+'）');
-  toast('🔑 APIキーエラーです。管理者に連絡してください（'+status+'）');
-}
-
-function _show403MigrateWarning(status){
-  document.getElementById('migrateBar')?.remove();
-  const bar=document.createElement('div');
-  bar.id='migrateBar';
-  bar.style.cssText='position:sticky;top:0;z-index:502;background:#1a1a2e;border-bottom:2px solid #f59e0b;color:#fde68a;padding:12px 16px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;font-size:.84rem;line-height:1.6';
-  bar.innerHTML=`<span>⚠️ <strong>クラウド保存ができません（${status}）。</strong><br>データはLocalStorageに保存済みです。安全です。<br><small style="opacity:.85">BINの書き込み権限がありません。F12コンソールで移行スクリプトを実行してください。</small></span>
-    <button onclick="this.parentElement.remove()" style="background:transparent;border:1px solid rgba(253,211,77,.4);color:#fde68a;padding:6px 12px;border-radius:5px;cursor:pointer;font-size:.8rem;flex-shrink:0">閉じる</button>`;
-  const syncBar=document.querySelector('.sync-bar');
-  syncBar?syncBar.insertAdjacentElement('afterend',bar):document.body.prepend(bar);
-  setSyncUI('err','保存不可（BIN移行が必要）—データはローカルに保存済み');
-  lsBackup();
-  console.warn('[JB] PUT 403: BINの書き込み権限なし。以下のスクリプトをコンソールで実行してください：');
-  console.log(`
-// ═══ BIN移行スクリプト ═══
-(async()=>{
-  const KEY='${MASTER_KEY}';
-  const OLD='${BIN_ID}';
-  const BASE='${JBBASE}';
-  const r=await fetch(BASE+'/'+OLD+'/latest',{headers:{'X-Master-Key':KEY}});
-  const d=await r.json();
-  const r2=await fetch(BASE,{
-    method:'POST',
-    headers:{'Content-Type':'application/json','X-Master-Key':KEY,'X-Bin-Name':'TaskBoard-Main'},
-    body:JSON.stringify(d.record||d)
-  });
-  const d2=await r2.json();
-  console.log('✅ 新BIN ID:', d2.metadata?.id, '← GitHubのBIN_IDをこの値に更新してください');
-})();`);
 }
 
 window.addEventListener('online',()=>{
@@ -765,7 +717,7 @@ function showConflictWarning(){
   document.getElementById('conflictBar')?.remove();
   const bar=document.createElement('div');bar.id='conflictBar';
   bar.style.cssText='position:sticky;top:0;z-index:500;background:#451a03;border-bottom:2px solid #92400e;color:#fde68a;padding:11px 16px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;font-size:.84rem;line-height:1.5';
-  bar.innerHTML=`<span>⚠️ <strong>他の端末でデータが更新されています。</strong><br>最新データを読み込んでから再保存してください。<br><small style="opacity:.8">※入力中の内容は一時保存済みです</small></span><button onclick="resolveConflict()" style="background:#d97706;color:#fff;padding:9px 16px;border:none;border-radius:6px;cursor:pointer;font-size:.84rem;font-weight:600;white-space:nowrap;flex-shrink:0">最新データを読み込む</button>`;
+  bar.innerHTML=`<span>⚠️ <strong>他の端末でデータが更新されています。</strong><br>最新データを読み込んでから再保存してください。</span><button onclick="resolveConflict()" style="background:#d97706;color:#fff;padding:9px 16px;border:none;border-radius:6px;cursor:pointer;font-size:.84rem;font-weight:600;white-space:nowrap;flex-shrink:0">最新データを読み込む</button>`;
   const syncBar=document.querySelector('.sync-bar');syncBar?syncBar.insertAdjacentElement('afterend',bar):document.body.prepend(bar);
 }
 async function resolveConflict(){
@@ -798,7 +750,7 @@ function _tabFocusSync(){
   if(_isEditingForm())return;                           // 入力中はスキップ
   if(localStorage.getItem(LS_DIRTY))return;             // 未保存変更あり → スキップ
   if(Date.now()-_lastSyncError<_ERROR_COOLDOWN)return;  // ★エラー後1分はスキップ
-  if(Date.now()-_lastSyncTime<_SYNC_THROTTLE)return;    // スロットル（5分）
+  if(Date.now()-_lastSyncTime<_SYNC_THROTTLE)return;    // スロットル（30秒）
   _lastSyncTime=Date.now();
   setSyncUI('saving','同期中…');
   cloudLoad(false).catch(()=>{});
@@ -976,13 +928,7 @@ function renderBoard(){
 function renderDone(){
   const b=document.getElementById('compBoard');
   document.getElementById('compCnt').textContent=S.done.length;
-  // 完了カードがある場合のみボタンを表示
-  const hasDone=S.done.length>0;
-  const archBtn=document.getElementById('archiveDoneBtn');
-  const delBtn=document.getElementById('deleteAllDoneBtn');
-  if(archBtn)archBtn.style.display=hasDone?'':'none';
-  if(delBtn)delBtn.style.display=hasDone?'':'none';
-  if(!hasDone){b.innerHTML='';return}
+  if(!S.done.length){b.innerHTML='';return}
   b.innerHTML=S.done.map(c=>`<div class="pcard done-st" id="pcard-${c.id}">
     <div class="cband ${bandCls(c)}">
       <div class="ctitle done">${esc(c.title)}</div>
@@ -1003,23 +949,6 @@ function renderDone(){
       </div>
     </div>
   </div>`).join('')
-}
-
-/* ── 完了カード全て削除 ── */
-function deleteAllDone(){
-  const n=S.done.length;
-  if(!confirm(`完了済みカード ${n} 件を全て完全削除しますか？\n※この操作は取り消せません`))return;
-  S.done=[];
-  render();save();
-  toast(`🗑 完了済み ${n} 件を削除しました`);
-}
-
-/* ── 完了カードをアーカイブBINに移動（UIから呼べる版） ── */
-async function archiveDoneCards(){
-  const n=S.done.length;
-  if(!confirm(`完了済みカード ${n} 件をアーカイブに移動しますか？\n（データは保持されます）`))return;
-  await _archiveDoneCards(false);
-  render();save();
 }
 
 function renderBadges(){
@@ -1714,43 +1643,14 @@ function _dgClean(){
 // CSV EXPORT
 // ─────────────────────────────────────────────
 function exportCSV(){
-  // 作業量 → 日本語ラベル変換
-  const waLabel={light:'軽度','1h':'1時間程度',over1h:'1時間以上',waiting:'他者待ち'};
-  // ヘッダー行（大カード追加列: 参考URL / 作業量 / ルーチン種別 / ルーチン日）
-  const rows=[['ID','タイトル','種別','期日','カテゴリ','緊急','重要','タグ','メモ','ルーチン','サブ数','完了数','参考URL','作業量','ルーチン種別','ルーチン日']];
+  const rows=[['ID','タイトル','種別','期日','カテゴリ','緊急','重要','タグ','メモ','ルーチン','サブ数','完了数']];
   [...S.cards,...S.done].forEach(c=>{
     const p=prog(c);
-    // 大カード行
-    rows.push([
-      c.id, c.title, S.done.includes(c)?'完了':'進行中',
-      c.dueDate||'', c.category||'',
-      c.urgent?'○':'', c.important?'○':'',
-      (c.tags||[]).join(';'), c.memo||'',
-      c.isRoutine?(c.routineType||''):'',
-      p?p.t:0, p?p.d:0,
-      (c.urls||[]).join(';'),          // 参考URL（配列を;区切り）
-      '',                               // 作業量（大カードはなし）
-      c.routineType||'',               // ルーチン種別
-      c.routineDay!=null?c.routineDay:'' // ルーチン日
-    ]);
-    // 小カード行
-    (c.subCards||[]).forEach(s=>rows.push([
-      '→'+s.id, '  └'+s.title, 'サブタスク',
-      s.dueDate||'', '', '', '', '', '',
-      s.isRoutine?(s.routineType||''):'',
-      '', s.completed?'完了':'未完了',
-      '',                               // 参考URL（サブはなし）
-      waLabel[s.workAmount]||'',        // 作業量 → 日本語
-      s.routineType||'',               // ルーチン種別
-      s.routineDay!=null?s.routineDay:'' // ルーチン日
-    ]));
+    rows.push([c.id,c.title,S.done.includes(c)?'完了':'進行中',c.dueDate,c.category,c.urgent?'○':'',c.important?'○':'',c.tags.join(';'),c.memo,c.isRoutine?c.routineType:'',p?p.t:0,p?p.d:0]);
+    c.subCards.forEach(s=>rows.push(['→'+s.id,'  └'+s.title,'サブタスク',s.dueDate,'','','','','','','',s.completed?'完了':'未完了']));
   });
   const csv=rows.map(r=>r.map(v=>`"${String(v).replace(/"/g,'""')}"`).join(',')).join('\n');
-  const a=document.createElement('a');
-  a.href=URL.createObjectURL(new Blob(['\uFEFF'+csv],{type:'text/csv;charset=utf-8'}));
-  a.download=`taskboard_${today()}.csv`;
-  a.click();
-  toast('📊 CSVをエクスポートしました（'+(rows.length-1)+'件）');
+  const a=document.createElement('a');a.href=URL.createObjectURL(new Blob(['\uFEFF'+csv],{type:'text/csv;charset=utf-8'}));a.download=`taskboard_${today()}.csv`;a.click();toast('📊 CSVをエクスポートしました');
 }
 
 // ─────────────────────────────────────────────
