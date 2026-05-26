@@ -19,7 +19,8 @@ body{font-family:'Noto Sans JP',sans-serif;background:var(--bg);color:var(--text
 ::-webkit-scrollbar-thumb{background:var(--border2);border-radius:3px}
 
 /* ── HEADER ── */
-.hdr{background:linear-gradient(135deg,var(--bg2),rgba(79,142,247,.07));border-bottom:1px solid var(--border);padding:14px 20px;position:sticky;top:0;z-index:100;backdrop-filter:blur(16px)}
+.hdr-wrap{position:sticky;top:0;z-index:100;background:var(--bg)}
+.hdr{background:linear-gradient(135deg,var(--bg2),rgba(79,142,247,.07));border-bottom:1px solid var(--border);padding:14px 20px;backdrop-filter:blur(16px)}
 .hdr-top{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
 .logo{font-family:'JetBrains Mono',monospace;font-size:1.3rem;font-weight:700;color:var(--accent);display:flex;align-items:center;gap:6px;white-space:nowrap;cursor:pointer;user-select:none}
 .logo:hover{opacity:.8}
@@ -319,6 +320,7 @@ body{font-family:'Noto Sans JP',sans-serif;background:var(--bg);color:var(--text
 </head>
 <body>
 
+<div class="hdr-wrap">
 <header class="hdr">
   <div class="hdr-top">
     <div class="logo" onclick="resetFilters()" title="クリックで絞り込み解除">⚡<b>Task</b>Board</div>
@@ -326,6 +328,8 @@ body{font-family:'Noto Sans JP',sans-serif;background:var(--bg);color:var(--text
     <div class="hdr-btns">
       <button class="btn bg bsm" id="sortBtn" onclick="sortByDue()">📅 期日順</button>
       <button class="btn bg bsm" onclick="exportCSV()">📊 CSV</button>
+      <button class="btn bg bsm" onclick="exportJSON()">📋 JSON</button>
+      <button class="btn bg bsm" onclick="openSettings()" title="接続設定・トークン変更">⚙️ 設定</button>
       <button class="btn bp" onclick="openAddCard()">＋ カード追加</button>
     </div>
   </div>
@@ -336,6 +340,7 @@ body{font-family:'Noto Sans JP',sans-serif;background:var(--bg);color:var(--text
   <span class="sync-msg" id="syncMsg">初期化中…</span>
   <span class="sync-id" id="syncId"></span>
   <button class="sync-retry" id="syncRetryBtn" style="display:none" onclick="cloudLoad(true)">↺ 再試行</button>
+  <span id="syncSavedAt" style="font-size:.7rem;color:var(--text3);margin-left:auto"></span>
 </div>
 
 <div class="fbar">
@@ -353,6 +358,7 @@ body{font-family:'Noto Sans JP',sans-serif;background:var(--bg);color:var(--text
     <option value="n">⚫ その他</option>
   </select>
 </div>
+</div><!-- /.hdr-wrap -->
 
 <main class="main">
   <div class="sec-lbl">進行中のタスク</div>
@@ -372,26 +378,31 @@ body{font-family:'Noto Sans JP',sans-serif;background:var(--bg);color:var(--text
   </div>
 </main>
 
-<!-- ===== TOKEN SETUP MODAL ===== -->
-<div class="mover" id="tokenSetupModal">
-<div class="modal" style="max-width:440px">
-  <h2>🔑 GitHub トークン設定</h2>
-  <p style="font-size:.85rem;color:var(--text2);line-height:1.7;margin-bottom:16px">
-    クラウド保存にGitHub Personal Access Tokenが必要です。<br>
-    トークンはこのブラウザにのみ保存され、GitHubには送信されません。
-  </p>
-  <div style="margin-bottom:12px">
-    <label style="font-size:.8rem;color:var(--text3);display:block;margin-bottom:6px">GitHub Personal Access Token（ghp_で始まる文字列）</label>
-    <input id="tokenInput" type="password" placeholder="ghp_xxxxxxxxxxxxxxxx"
-      style="width:100%;box-sizing:border-box;padding:10px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:var(--rs);color:var(--text);font-size:.85rem;font-family:'JetBrains Mono',monospace"
-      onkeydown="if(event.key==='Enter')saveTokenSetup()">
+<!-- ===== SETTINGS MODAL ===== -->
+<div class="mover" id="settingsModal">
+<div class="modal" style="max-width:500px">
+  <h2>⚙️ 接続設定</h2>
+  <div id="settingStatus" style="font-size:.83rem;padding:8px 12px;background:var(--surface2);border-radius:var(--rs);margin-bottom:14px;line-height:1.6"></div>
+  <div style="margin-bottom:14px">
+    <label style="font-size:.8rem;color:var(--text3);display:block;margin-bottom:6px">Gist ID（データ保存先）</label>
+    <input id="settingGistId" type="text" placeholder="7ef6f106898526f60ab0037ac58d07d2"
+      style="width:100%;box-sizing:border-box;padding:9px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:var(--rs);color:var(--text);font-size:.84rem;font-family:'JetBrains Mono',monospace">
+    <div style="font-size:.73rem;color:var(--text3);margin-top:4px">空欄のままにするとデフォルト値を使用します</div>
   </div>
-  <p style="font-size:.75rem;color:var(--text3);margin-bottom:16px">
-    ※ 作成方法：<a href="https://github.com/settings/tokens/new" target="_blank" style="color:var(--accent)">github.com/settings/tokens/new</a> で
-    「gist」スコープのトークンを作成してください
-  </p>
-  <div class="mfoot">
-    <button id="tokenSaveBtn" class="btn bp" onclick="saveTokenSetup()">保存して接続</button>
+  <div style="margin-bottom:12px">
+    <label style="font-size:.8rem;color:var(--text3);display:block;margin-bottom:6px">GitHub Token（ghp_で始まる文字列）</label>
+    <input id="settingToken" type="password" placeholder="設定済みの場合は空欄でOK（変更する場合のみ入力）"
+      style="width:100%;box-sizing:border-box;padding:9px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:var(--rs);color:var(--text);font-size:.84rem;font-family:'JetBrains Mono',monospace"
+      onkeydown="if(event.key==='Enter')testAndSaveSettings()">
+    <div style="font-size:.73rem;color:var(--text3);margin-top:4px">
+      ※ トークンはこのブラウザにのみ保存されます。<br>
+      作成：<a href="https://github.com/settings/tokens/new" target="_blank" style="color:var(--accent)">github.com/settings/tokens/new</a>（gistスコープのみ）
+    </div>
+  </div>
+  <div class="mfoot" style="flex-wrap:wrap;gap:8px">
+    <button id="settingSaveBtn" class="btn bp" onclick="testAndSaveSettings()">保存して接続テスト</button>
+    <button class="btn bg bsm" onclick="clearSettings()" style="color:var(--danger)">設定をリセット</button>
+    <button class="btn bg bsm" onclick="closeModal('settingsModal')">閉じる</button>
   </div>
 </div>
 </div>
@@ -525,7 +536,9 @@ function gid(){return Date.now().toString(36)+Math.random().toString(36).slice(2
 // ─────────────────────────────────────────────
 // CLOUD SYNC — GitHub Gist（トークンはLocalStorageに保存）
 // ─────────────────────────────────────────────
-const GIST_ID   = "7ef6f106898526f60ab0037ac58d07d2";
+const DEFAULT_GIST_ID = "7ef6f106898526f60ab0037ac58d07d2";
+const LS_GIST_ID      = 'tb3_gist_id';
+function _getGistId(){return localStorage.getItem(LS_GIST_ID)||DEFAULT_GIST_ID;}
 const GIST_FILE = "taskboard.json";
 const GIST_BASE = "https://api.github.com/gists";
 const LS_DIRTY  = 'tb3_dirty';
@@ -535,6 +548,7 @@ const LS_BACKUP = 'tb3_backup';
 const LS_TOKEN  = 'tb3_gist_token'; // トークンはLocalStorageに保存
 
 let _saveTimer=null, _saving=false, _isLoading=false;
+let _lastSavedTime=null;
 let _online=navigator.onLine;
 let _localVersion=0, _lastSyncTime=0, _lastSyncError=0;
 const _SYNC_THROTTLE=300000;
@@ -545,22 +559,22 @@ function _gistHeaders(){
   return{'Authorization':'Bearer '+_getToken(),'Accept':'application/vnd.github.v3+json','Content-Type':'application/json'};
 }
 
-console.log('[TaskBoard] Gist ID:', GIST_ID);
+console.log('[TaskBoard] Gist ID:', _getGistId());
 console.log('[TaskBoard] Token設定済み:', !!_getToken());
 
 /* ── トークン未設定時のセットアップ ── */
 function _needsSetup(){return !_getToken();}
 function openTokenSetup(){
-  document.getElementById('tokenSetupModal').classList.add('vis');
+  openSettings();
 }
-async function saveTokenSetup(){
+async function saveTokenSetup_legacy(){
   const t=document.getElementById('tokenInput').value.trim();
   if(!t){toast('⚠️ トークンを入力してください');return;}
   // 接続テスト
   const btn=document.getElementById('tokenSaveBtn');
   btn.textContent='確認中…';btn.disabled=true;
   try{
-    const res=await fetch(GIST_BASE+'/'+GIST_ID,{
+    const res=await fetch(GIST_BASE+'/'+_getGistId(),{
       headers:{'Authorization':'Bearer '+t,'Accept':'application/vnd.github.v3+json'}
     });
     if(res.status===401){toast('❌ トークンが無効です。正しいトークンを入力してください');btn.textContent='保存して接続';btn.disabled=false;return;}
@@ -568,7 +582,7 @@ async function saveTokenSetup(){
     if(!res.ok){toast('❌ 接続エラー HTTP '+res.status);btn.textContent='保存して接続';btn.disabled=false;return;}
     // 成功
     localStorage.setItem(LS_TOKEN,t);
-    document.getElementById('tokenSetupModal').classList.remove('vis');
+    closeModal('settingsModal');
     toast('✅ 接続成功！データを読み込みます');
     cloudLoad(true);
   }catch(e){
@@ -582,7 +596,7 @@ window.tbDiag=async function(){
   console.log('Gist ID:', GIST_ID);
   console.log('Token設定済み:', !!_getToken());
   try{
-    const res=await fetch(GIST_BASE+'/'+GIST_ID,{headers:_gistHeaders()});
+    const res=await fetch(GIST_BASE+'/'+_getGistId(),{headers:_gistHeaders()});
     console.log('HTTP Status:', res.status, res.statusText);
     if(res.ok){const g=await res.json();const d=JSON.parse(g.files[GIST_FILE]?.content||'{}');console.log('✅ 接続成功 カード:'+(d.cards||[]).length+'件');}
     else{console.error('❌ HTTP '+res.status);}
@@ -597,8 +611,21 @@ function setSyncUI(state,msg,showRetry=false){
   const retry=document.getElementById('syncRetryBtn');
   if(dot)dot.className='sync-dot '+state;
   if(msgEl)msgEl.textContent=msg;
-  if(idEl)idEl.textContent='Gist:'+GIST_ID.slice(-8);
+  if(idEl)idEl.textContent='Gist:'+_getGistId().slice(-8);
   if(retry)retry.style.display=showRetry?'':'none';
+  _updateSavedAt();
+}
+
+function _updateSavedAt(){
+  const el=document.getElementById('syncSavedAt');
+  if(!el)return;
+  if(_lastSavedTime){
+    const h=_lastSavedTime.getHours().toString().padStart(2,'0');
+    const m=_lastSavedTime.getMinutes().toString().padStart(2,'0');
+    el.textContent='最終保存 '+h+':'+m;
+  }else{
+    el.textContent='';
+  }
 }
 
 function lsSave(){try{localStorage.setItem(LS_CACHE,JSON.stringify(S))}catch(e){}}
@@ -635,7 +662,7 @@ async function cloudSave(){
   setSyncUI('saving','保存中…');
   try{
     S.version=(_localVersion||0)+1;
-    const res=await fetch(GIST_BASE+'/'+GIST_ID,{
+    const res=await fetch(GIST_BASE+'/'+_getGistId(),{
       method:'PATCH',
       headers:_gistHeaders(),
       body:JSON.stringify({files:{[GIST_FILE]:{content:JSON.stringify(S)}}})
@@ -649,6 +676,8 @@ async function cloudSave(){
     _localVersion=S.version;
     lsSave();localStorage.removeItem(LS_DIRTY);
     console.log('[Gist] 保存成功 v'+_localVersion+' カード:'+S.cards.length+'件');
+    _lastSavedTime=new Date();
+    _updateSavedAt();
     setSyncUI('ok','クラウド保存済み ✓ (v'+_localVersion+')');
   }catch(e){
     lsBackup();
@@ -670,7 +699,7 @@ async function cloudLoad(isManual=false){
   setSyncUI('saving','読込中…');
   console.group('[Gist] cloudLoad');
   try{
-    const res=await fetch(GIST_BASE+'/'+GIST_ID,{headers:_gistHeaders()});
+    const res=await fetch(GIST_BASE+'/'+_getGistId(),{headers:_gistHeaders()});
     console.log('HTTP:',res.status);
     if(res.status===401){localStorage.removeItem(LS_TOKEN);openTokenSetup();throw new Error('トークン期限切れ');}
     if(!res.ok)throw new Error('HTTP '+res.status);
@@ -710,7 +739,7 @@ window.addEventListener('online',()=>{
     cloudSave().then(()=>{if(!document.getElementById('conflictBar'))toast('☁️ オフライン中の変更を同期しました')}).catch(()=>setSyncUI('err','同期失敗',true));
   }else{setSyncUI('ok','オンライン')}
 });
-window.addEventListener('offline',()=>{_online=false;setSyncUI('off','オフライン — ローカル保存中');toast('📴 オフラインです。変更はローカルに保存されます')});
+window.addEventListener('offline',()=>{_online=false;setSyncUI('off','オフライン — 次回接続時に自動保存');toast('📴 オフラインです。次回接続時に自動保存します')});
 
 function showConflictWarning(){
   setSyncUI('err','競合を検出 — 下のバーを確認');
@@ -1642,15 +1671,138 @@ function _dgClean(){
 // ─────────────────────────────────────────────
 // CSV EXPORT
 // ─────────────────────────────────────────────
+/* ── 設定モーダル ── */
+function openSettings(){
+  const gid=localStorage.getItem(LS_GIST_ID)||'';
+  const tok=_getToken();
+  const el=document.getElementById('settingGistId');
+  const ti=document.getElementById('settingToken');
+  if(el) el.value=gid;
+  if(ti) ti.value='';
+  const st=document.getElementById('settingStatus');
+  if(st){
+    const connected=!!tok;
+    st.innerHTML=connected
+      ?`<span style="color:var(--ok)">✅ 接続設定済み</span>　Gist: <code style="font-size:.8rem">${_getGistId().slice(0,8)}...${_getGistId().slice(-6)}</code>`
+      :`<span style="color:var(--danger)">❌ 未設定</span>　Gist IDとトークンを入力してください`;
+  }
+  openModal('settingsModal');
+}
+
+async function testAndSaveSettings(){
+  const newGid=document.getElementById('settingGistId').value.trim();
+  const newTok=document.getElementById('settingToken').value.trim();
+  const gid=newGid||_getGistId();
+  const tok=newTok||_getToken();
+  if(!tok){toast('⚠️ トークンを入力してください');return;}
+  const btn=document.getElementById('settingSaveBtn');
+  btn.textContent='確認中…';btn.disabled=true;
+  const st=document.getElementById('settingStatus');
+  if(st) st.innerHTML='🔄 接続テスト中...';
+  try{
+    const res=await fetch(GIST_BASE+'/'+gid,{
+      headers:{'Authorization':'Bearer '+tok,'Accept':'application/vnd.github.v3+json'}
+    });
+    if(res.status===401){
+      if(st) st.innerHTML='<span style="color:var(--danger)">❌ トークンが無効です</span>';
+      btn.textContent='保存して接続テスト';btn.disabled=false;return;
+    }
+    if(res.status===404){
+      if(st) st.innerHTML='<span style="color:var(--danger)">❌ Gist IDが見つかりません</span>';
+      btn.textContent='保存して接続テスト';btn.disabled=false;return;
+    }
+    if(!res.ok){
+      if(st) st.innerHTML=`<span style="color:var(--danger)">❌ エラー HTTP ${res.status}</span>`;
+      btn.textContent='保存して接続テスト';btn.disabled=false;return;
+    }
+    if(newTok) localStorage.setItem(LS_TOKEN, newTok);
+    if(newGid) localStorage.setItem(LS_GIST_ID, newGid);
+    else if(!newGid && localStorage.getItem(LS_GIST_ID)===null && newGid==='')
+      localStorage.removeItem(LS_GIST_ID);
+    closeModal('settingsModal');
+    toast('✅ 設定を保存しました。データを読み込みます');
+    btn.textContent='保存して接続テスト';btn.disabled=false;
+    cloudLoad(true);
+  }catch(e){
+    if(st) st.innerHTML=`<span style="color:var(--danger)">❌ 通信エラー: ${e.message}</span>`;
+    btn.textContent='保存して接続テスト';btn.disabled=false;
+  }
+}
+
+function clearSettings(){
+  if(!confirm('接続設定をリセットしますか？\n（トークンとGist IDが削除されます）'))return;
+  localStorage.removeItem(LS_TOKEN);
+  localStorage.removeItem(LS_GIST_ID);
+  toast('🗑 設定をリセットしました');
+  openSettings();
+}
+
+/* ── JSONエクスポート ── */
+function exportJSON(){
+  const data={...S, exportedAt:new Date().toISOString(), version:_localVersion};
+  const json=JSON.stringify(data, null, 2);
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(new Blob([json],{type:'application/json;charset=utf-8'}));
+  a.download=`taskboard_backup_${today()}.json`;
+  a.click();
+  toast('📋 JSONをエクスポートしました（'+S.cards.length+'件）');
+}
+
 function exportCSV(){
-  const rows=[['ID','タイトル','種別','期日','カテゴリ','緊急','重要','タグ','メモ','ルーチン','サブ数','完了数']];
-  [...S.cards,...S.done].forEach(c=>{
-    const p=prog(c);
-    rows.push([c.id,c.title,S.done.includes(c)?'完了':'進行中',c.dueDate,c.category,c.urgent?'○':'',c.important?'○':'',c.tags.join(';'),c.memo,c.isRoutine?c.routineType:'',p?p.t:0,p?p.d:0]);
-    c.subCards.forEach(s=>rows.push(['→'+s.id,'  └'+s.title,'サブタスク',s.dueDate,'','','','','','','',s.completed?'完了':'未完了']));
+  const waLabel={light:'軽度','1h':'1時間程度',over1h:'1時間以上',waiting:'他者待ち'};
+  const rtLabel={daily:'毎日',weekly:'毎週',monthly:'毎月'};
+  const headers=[
+    '種別','ID','タイトル','状態','期日','カテゴリ','緊急','重要',
+    'タグ','メモ','参考URL',
+    'ルーチン','ルーチン種別','ルーチン日',
+    'サブタスク数','完了サブタスク数',
+    '作業量','担当者'
+  ];
+  const rows=[headers];
+  const allCards=[...S.cards.map(c=>({...c,_done:false})),...S.done.map(c=>({...c,_done:true}))];
+  allCards.forEach(c=>{
+    const subTotal=( c.subCards||[]).length;
+    const subDone =(c.subCards||[]).filter(s=>s.completed).length;
+    rows.push([
+      '大カード',
+      c.id||'',
+      c.title||'',
+      c._done?'完了':'進行中',
+      c.dueDate||'',
+      c.category||'',
+      c.urgent?'○':'-',
+      c.important?'○':'-',
+      (c.tags||[]).join(';'),
+      c.memo||'',
+      (c.urls||[]).join(';'),
+      c.isRoutine?'○':'-',
+      rtLabel[c.routineType]||c.routineType||'',
+      c.routineDay!=null?c.routineDay:'',
+      subTotal,
+      subDone,
+      '',''
+    ]);
+    (c.subCards||[]).forEach(s=>rows.push([
+      '小カード',
+      s.id||'',
+      '  └'+(s.title||''),
+      s.completed?'完了':'未完了',
+      s.dueDate||'',
+      '','','','','','',
+      s.isRoutine?'○':'-',
+      rtLabel[s.routineType]||s.routineType||'',
+      s.routineDay!=null?s.routineDay:'',
+      '','',
+      waLabel[s.workAmount]||s.workAmount||'',
+      s.waitingPerson||''
+    ]));
   });
   const csv=rows.map(r=>r.map(v=>`"${String(v).replace(/"/g,'""')}"`).join(',')).join('\n');
-  const a=document.createElement('a');a.href=URL.createObjectURL(new Blob(['\uFEFF'+csv],{type:'text/csv;charset=utf-8'}));a.download=`taskboard_${today()}.csv`;a.click();toast('📊 CSVをエクスポートしました');
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(new Blob(['\uFEFF'+csv],{type:'text/csv;charset=utf-8'}));
+  a.download=`taskboard_${today()}.csv`;
+  a.click();
+  toast('📊 CSVをエクスポートしました('+(rows.length-1)+'件)');
 }
 
 // ─────────────────────────────────────────────
