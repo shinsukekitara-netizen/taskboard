@@ -116,6 +116,7 @@ body{font-family:'Noto Sans JP',sans-serif;background:var(--bg);color:var(--text
 /* ── TAGS ── */
 .tags-r{display:flex;flex-wrap:wrap;gap:3px;margin-bottom:7px}
 .tpill{font-size:.68rem;padding:2px 7px;border-radius:10px;font-weight:600}
+.created-at{font-size:.68rem;color:var(--text3);margin-bottom:6px;padding-bottom:6px;border-bottom:1px solid rgba(255,255,255,.05)}
 .due-ch{font-size:.72rem;color:var(--text2);margin-bottom:7px;display:flex;align-items:center;gap:4px}
 .memo-t{font-size:.76rem;color:#ffffff;margin-bottom:8px;padding:5px 8px;background:rgba(255,255,255,.03);border-radius:5px;line-height:1.5;border-left:2px solid var(--border2);word-break:break-word;overflow-wrap:break-word;white-space:pre-wrap;max-width:100%;overflow:hidden}
 
@@ -889,6 +890,7 @@ function renderCard(c){
   if(c.tags.length)tHtml='<div class="tags-r">'+c.tags.map(t=>{const col=getTColor(t);return`<span class="tpill" style="background:${hex2rgba(col,.22)};color:${col};border:1px solid ${hex2rgba(col,.4)}">${esc(t)}</span>`}).join('')+'</div>';
 
   let dHtml=c.dueDate?`<div class="due-ch">📅 ${fmtD(c.dueDate)}${dueLabel(dc)}</div>`:'';
+  let caHtml=c.createdAt?`<div class="created-at">📝 作成日 ${new Date(c.createdAt).toLocaleDateString('ja-JP')}</div>`:'';
   // ④ URL表示
   let urlHtml='';
   if(c.urls&&c.urls.length){
@@ -918,7 +920,7 @@ function renderCard(c){
           onclick="event.stopPropagation();handleCardCheck('${c.id}',this)">
         <label for="pchk-${c.id}" class="pchk-label" onclick="event.stopPropagation()">${isDone?'完了済み（クリックで戻す）':'完了にする'}</label>
       </div>
-      ${pHtml}${dHtml}${tHtml}${mHtml}${urlHtml}
+      ${caHtml}${pHtml}${dHtml}${tHtml}${mHtml}${urlHtml}
       <div class="subcards">${scHtml}</div>
       <div class="cacts">
         ${routBtn}
