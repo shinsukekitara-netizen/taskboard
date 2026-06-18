@@ -44,6 +44,19 @@ body{font-family:'Noto Sans JP',sans-serif;background:var(--bg);color:var(--text
 .bico{padding:5px;background:transparent;color:var(--text2);border-radius:5px}.bico:hover{background:var(--surface3);color:var(--accent)}
 .sort-on{border-color:var(--accent)!important;background:rgba(26,86,219,.1)!important;color:var(--accent)!important}
 
+
+/* ── DATE RANGE FILTER ── */
+.drbar{display:flex;align-items:center;gap:8px;padding:8px 20px;background:var(--surface);border-bottom:1px solid var(--border);flex-wrap:wrap}
+.drbar label{font-size:.8rem;color:var(--text2);white-space:nowrap}
+.drbar input[type=date]{padding:5px 8px;background:var(--surface2);border:1px solid var(--border);border-radius:var(--rs);color:var(--text);font-size:.82rem;font-family:'Noto Sans JP',sans-serif}
+.drbar input[type=date]:focus{outline:none;border-color:var(--accent)}
+.dr-view-btns{display:flex;gap:4px;margin-left:auto}
+.dr-view-btn{padding:5px 12px;border:1px solid var(--border);border-radius:var(--rs);background:var(--surface2);color:var(--text2);font-size:.8rem;cursor:pointer;transition:all .15s}
+.dr-view-btn.active{background:rgba(79,142,247,.15);border-color:var(--accent);color:var(--accent);font-weight:600}
+/* B案：一覧表示モード */
+.board.list-mode{display:flex;flex-direction:column;gap:10px}
+.board.list-mode .pcard{width:100%;max-width:680px}
+.dr-label{font-size:.72rem;color:var(--text3);margin-left:8px}
 /* ── FILTER BAR ── */
 .fbar{display:flex;gap:8px;padding:10px 20px;background:#dce9fa;border-bottom:1px solid var(--border);flex-wrap:wrap;align-items:center}
 .sw{position:relative;flex:1;min-width:180px}
@@ -326,7 +339,8 @@ body{font-family:'Noto Sans JP',sans-serif;background:var(--bg);color:var(--text
     <div class="logo" onclick="resetFilters()" title="クリックで絞り込み解除">🔵<b>Task Board</b> PB</div>
     <div class="badge-row" id="dueBadges"></div>
     <div class="hdr-btns">
-      <button class="btn bg bsm" id="sortBtn" onclick="sortByDue()">📅 期日順</button>
+      <button class="btn bg bsm" id="sortBtn" onclick="toggleDrBar()">📅 期間絞込み</button>
+      <button class="btn bg bsm" id="tomorrowBtn" onclick="moveTodayToTomorrow()" title="今日期日・未完了のタスクを明日へ一括変更">📅 期日を明日へ</button>
       <button class="btn bg bsm" onclick="exportCSV()">📊 CSV</button>
       <button class="btn bg bsm" onclick="exportJSON()">📋 JSON</button>
       <button class="btn bg bsm" onclick="openSettings()" title="接続設定・トークン変更">⚙️ 設定</button>
@@ -343,6 +357,19 @@ body{font-family:'Noto Sans JP',sans-serif;background:var(--bg);color:var(--text
   <span id="syncSavedAt" style="font-size:.7rem;color:var(--text3);margin-left:auto"></span>
 </div>
 
+
+<div class="drbar" id="drBar" style="display:none">
+  <label>開始日</label>
+  <input type="date" id="drFrom" onchange="applyDrFilter()">
+  <label>〜 終了日</label>
+  <input type="date" id="drTo" onchange="applyDrFilter()">
+  <button class="btn bg bsm" onclick="clearDrFilter()" style="font-size:.78rem">✕ 解除</button>
+  <div class="dr-view-btns">
+    <button class="dr-view-btn active" id="drViewA" onclick="setDrView('A')">A</button>
+    <button class="dr-view-btn" id="drViewB" onclick="setDrView('B')">B</button>
+  </div>
+  <span class="dr-label" id="drLabel"></span>
+</div>
 <div class="fbar">
   <div class="sw">
     <span class="ico">🔍</span>
@@ -843,6 +870,7 @@ function cardBg(c){if(c.tags&&c.tags.length){const col=getTColor(c.tags[0]);retu
 
 // ④⑤ badge filter state
 let dueBadgeFilter=null; // 'today' | 'tmr' | 'past' | null
+let _drFrom='',_drTo='',_drActive=false,_drView='A'; // 期間フィルター状態
 
 // ─────────────────────────────────────────────
 // RENDER
@@ -936,6 +964,85 @@ function renderSub(pid,s){
   </div>`
 }
 
+
+// ─────────────────────────────────────────────
+// 期間フィルター
+// ─────────────────────────────────────────────
+function toggleDrBar(){
+  const bar=document.getElementById('drBar');
+  const isVisible=bar.style.display!=='none';
+  if(isVisible){clearDrFilter();bar.style.display='none';}
+  else{bar.style.display='flex';document.getElementById('drFrom').focus();}
+  document.getElementById('sortBtn').classList.toggle('sort-on',!isVisible&&_drActive);
+}
+
+function applyDrFilter(){
+  _drFrom=document.getElementById('drFrom').value;
+  _drTo=document.getElementById('drTo').value;
+  _drActive=!!(_drFrom||_drTo);
+  document.getElementById('sortBtn').classList.toggle('sort-on',_drActive);
+  const cnt=_countDrCards();
+  document.getElementById('drLabel').textContent=_drActive?`${cnt}件該当`:'';
+  renderBoard();
+}
+
+function _countDrCards(){
+  return S.cards.filter(c=>_cardMatchesDr(c)).length;
+}
+
+function _cardMatchesDr(c){
+  // 大カードの期日チェック
+  if(c.dueDate&&_inDrRange(c.dueDate))return true;
+  // 小カードの期日チェック
+  if(c.subCards.some(s=>s.dueDate&&_inDrRange(s.dueDate)))return true;
+  return false;
+}
+
+function _inDrRange(dateStr){
+  if(!dateStr)return false;
+  if(_drFrom&&dateStr<_drFrom)return false;
+  if(_drTo&&dateStr>_drTo)return false;
+  return true;
+}
+
+function clearDrFilter(){
+  _drFrom='';_drTo='';_drActive=false;_drView='A';
+  document.getElementById('drFrom').value='';
+  document.getElementById('drTo').value='';
+  document.getElementById('drLabel').textContent='';
+  document.getElementById('sortBtn').classList.remove('sort-on');
+  setDrView('A');
+  renderBoard();
+}
+
+function setDrView(v){
+  _drView=v;
+  document.getElementById('drViewA').classList.toggle('active',v==='A');
+  document.getElementById('drViewB').classList.toggle('active',v==='B');
+  renderBoard();
+}
+
+// ─────────────────────────────────────────────
+// ③ 今日期日を明日へ一括変更
+// ─────────────────────────────────────────────
+function moveTodayToTomorrow(){
+  const t=today(),tm=tmr();
+  let cnt=0;
+  S.cards.forEach(c=>{
+    if(!c.completed){
+      // 大カード
+      if(c.dueDate===t){c.dueDate=tm;cnt++;}
+      // 小カード
+      c.subCards.forEach(s=>{
+        if(!s.completed&&s.dueDate===t){s.dueDate=tm;cnt++;}
+      });
+    }
+  });
+  if(cnt===0){toast('📅 今日期日の未完了タスクはありません');return;}
+  toast(`📅 ${cnt}件のタスクの期日を明日（${fmtD(tm)}）に変更しました`);
+  render();
+}
+
 function renderBoard(){
   const board=document.getElementById('board');
   let cards=filteredCards!==null?filteredCards:S.cards;
@@ -943,19 +1050,34 @@ function renderBoard(){
   if(dueBadgeFilter){
     const t=today();
     if(dueBadgeFilter==='past'){
-      // ①期限切れ：大カード・小カード両方対象、完了済み除外
       cards=cards.filter(c=>!c.completed&&(
         (c.dueDate&&c.dueDate<t)||
         c.subCards.some(s=>!s.completed&&s.dueDate&&s.dueDate<t)
       ));
     } else {
       const dateStr=dueBadgeFilter==='today'?t:tmr();
-      // ②完了済み大カード・完了済みサブカードを除外
       cards=cards.filter(c=>!c.completed&&(c.dueDate===dateStr||c.subCards.some(s=>!s.completed&&s.dueDate===dateStr)));
     }
   }
+  // 期間フィルター
+  if(_drActive){
+    cards=cards.filter(c=>_cardMatchesDr(c));
+  }
   if(!cards.length){board.innerHTML='<div class="empty-st">📭<br><br>該当するカードがありません</div>';return}
-  const ordered=S.sortedByDue?[...cards].sort((a,b)=>{if(!a.dueDate)return 1;if(!b.dueDate)return-1;return a.dueDate.localeCompare(b.dueDate)}):[...cards].sort((a,b)=>a.order-b.order);
+  const ordered=_drActive
+    ?[...cards].sort((a,b)=>{
+        // 期間フィルター中は期日順ソート（大カード優先、小カード期日も考慮）
+        const aDate=a.dueDate||(a.subCards.filter(s=>_inDrRange(s.dueDate)).map(s=>s.dueDate).sort()[0])||'9999';
+        const bDate=b.dueDate||(b.subCards.filter(s=>_inDrRange(s.dueDate)).map(s=>s.dueDate).sort()[0])||'9999';
+        return aDate.localeCompare(bDate);
+      })
+    :[...cards].sort((a,b)=>a.order-b.order);
+  // A案/B案の表示切替
+  if(_drActive&&_drView==='B'){
+    board.classList.add('list-mode');
+  } else {
+    board.classList.remove('list-mode');
+  }
   board.innerHTML=ordered.map(c=>renderCard(c)).join('');
   initDrag();
 }
@@ -1160,6 +1282,7 @@ function filterByDue(type){
 
 // ⑤ ロゴクリックで全リセット
 function resetFilters(){
+  if(_drActive){clearDrFilter();document.getElementById('drBar').style.display='none';}
   const hasFilter=dueBadgeFilter||filteredCards!==null||
     document.getElementById('searchInput').value||
     document.getElementById('fCat').value||
@@ -1746,7 +1869,7 @@ function exportCSV(){
     'タグ','メモ','参考URL',
     'ルーチン','ルーチン種別','ルーチン日',
     'サブタスク数','完了サブタスク数',
-    '作業量','担当者'
+    '作業量','担当者','大カード作成日'
   ];
   const rows=[headers];
   const allCards=[...S.cards.map(c=>({...c,_done:false})),...S.done.map(c=>({...c,_done:true}))];
@@ -1770,7 +1893,8 @@ function exportCSV(){
       c.routineDay!=null?c.routineDay:'',
       subTotal,
       subDone,
-      '',''
+      '','',
+      c.createdAt?new Date(c.createdAt).toLocaleDateString('ja-JP'):''
     ]);
     (c.subCards||[]).forEach(s=>rows.push([
       '小カード',
@@ -1784,7 +1908,8 @@ function exportCSV(){
       s.routineDay!=null?s.routineDay:'',
       '','',
       waLabel[s.workAmount]||s.workAmount||'',
-      s.waitingPerson||''
+      s.waitingPerson||'',
+      ''
     ]));
   });
   const csv=rows.map(r=>r.map(v=>`"${String(v).replace(/"/g,'""')}"`).join(',')).join('\n');
