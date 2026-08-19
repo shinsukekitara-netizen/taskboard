@@ -618,7 +618,7 @@ async function saveTokenSetup_legacy(){
 
 window.tbDiag=async function(){
   console.group('[tbDiag PB] GitHub Gist 接続テスト');
-  console.log('Gist ID:', GIST_ID, '| File:', GIST_FILE);
+  console.log('Gist ID:', _getGistId(), '| File:', GIST_FILE);
   console.log('Token設定済み:', !!_getToken());
   try{
     const res=await fetch(GIST_BASE+'/'+_getGistId(),{headers:_gistHeaders()});
